@@ -55,7 +55,7 @@ function Login({ onLogin }) {
               className="w-full border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="123456"
+              placeholder="admin"
             />
           </div>
 
