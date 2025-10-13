@@ -1,8 +1,8 @@
-
 <body>
+
   <h1>💇‍♀️ Luxe Hair — Hair Clinic Management Application</h1>
 
-  <p><strong>Luxe Hair</strong> is a full-stack <strong>MERN (MongoDB, Express.js, React.js, Node.js)</strong> web application built for modern hair clinics. It provides a seamless experience for clients to <strong>book appointments, purchase combo services, make payments (COD or Online)</strong>, while enabling admins to <strong>manage services, staff, offers, bookings, and analytics</strong> — all in one place.</p>
+  <p><strong>Luxe Hair</strong> is a full-stack <strong>MERN (MongoDB, Express.js, React.js, Node.js)</strong> web application built for modern hair clinics. It provides a seamless experience for clients to <strong>book appointments, purchase combo services, and make payments (COD or Online)</strong>, while enabling admins to <strong>manage services, staff, offers, bookings, and analytics</strong> — all in one place.</p>
 
   <h2>🧠 Features</h2>
 
@@ -12,7 +12,7 @@
     <li>Book <strong>appointments</strong> or <strong>combo packages</strong></li>
     <li>Choose <strong>Cash on Delivery (COD)</strong> or <strong>Online Payment (Dummy Gateway)</strong></li>
     <li>Receive <strong>email reminders</strong> for appointments and combos</li>
-    <li>Get <strong>payment status updates</strong> via email (success / failure)</li>
+    <li>Get <strong>payment status updates</strong> via email (success/failure)</li>
     <li>Manage profile and booking history</li>
     <li>Explore <strong>articles</strong> and contact the clinic</li>
   </ul>
@@ -36,7 +36,10 @@
 
   <h2>🧩 Tech Stack</h2>
   <table>
-    <tr><th>Layer</th><th>Technology</th></tr>
+    <tr>
+      <th>Layer</th>
+      <th>Technology</th>
+    </tr>
     <tr><td>Frontend</td><td>React.js, React Router, Tailwind CSS</td></tr>
     <tr><td>Backend</td><td>Node.js, Express.js</td></tr>
     <tr><td>Database</td><td>MongoDB (Mongoose ORM)</td></tr>
@@ -61,21 +64,24 @@ npm install
 cd client
 npm install</code></pre>
 
-  <h4>3️⃣ Setup Environment Variables</h4>
+  <h4>3️⃣ Setup Environment Variables (Backend)</h4>
   <pre><code>MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=your_secret_key
 PORT=5000
 EMAIL_USER=your_email@example.com
 EMAIL_PASS=your_email_app_password</code></pre>
 
-  <h4>4️⃣ Run the Application</h4>
+  <h4>4️⃣ Setup Environment Variables (Client/Admin)</h4>
+  <pre><code>VITE_API_URL=http://localhost:5000</code></pre>
+
+  <h4>5️⃣ Run the Application</h4>
   <pre><code># Start backend
 cd server
 npm run dev
 
 # Start frontend
-cd client
-npm start</code></pre>
+cd client   # or cd admin
+npm run dev</code></pre>
 
   <h2>💌 Email Notifications</h2>
   <ul>
@@ -95,7 +101,7 @@ npm start</code></pre>
   <p>
     <strong>Developed by:</strong> Sudharshan Rao Nellore<br>
     📧 Email: <a href="mailto:sudharshannellore@gmail.com">sudharshannellore@gmail.com</a><br>
-    🐙 GitHub: <a href="https://github.com/Sudharshannellore" target="_blank">github.com/Sudharshannellore</a><br>
+    🐙 GitHub: <a href="https://github.com/Sudharshannellore" target="_blank">github.com/Sudharshannellore</a>
   </p>
 
   <h2>🪄 Future Enhancements</h2>
@@ -105,10 +111,11 @@ npm start</code></pre>
     <li>Enhance analytics (daily reports, retention tracking)</li>
   </ul>
 
-  <h2>🌐 Live Links </h2>
-   Admin : <a href="https://adminluxehair.vercel.app" target="_blank">https://admin.luxehair</a><br>
-   Client : <a href="https://luxehair-ruby.vercel.app/" target="_blank">https://luxehair</a><br>
+  <h2>🌐 Live Links</h2>
+  <p>
+    Admin: <a href="https://adminluxehair.vercel.app" target="_blank">https://adminluxehair.vercel.app</a><br>
+    Client: <a href="https://luxehair-ruby.vercel.app/" target="_blank">https://luxehair-ruby.vercel.app/</a>
+  </p>
 
   <footer>© 2025 Luxe Hair | Built with ❤️ using MERN Stack</footer>
 </body>
-</html>
