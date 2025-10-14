@@ -12,7 +12,7 @@ export default function Offers() {
   useEffect(() => {
     const fetchOffers = async () => {
       try {
-        const response = await axios.get(`${API_URL}/get-all`);
+        const response = await axios.get(`${API_URL}/coupon/get-all`);
         setOffers(response.data);
         setLoading(false);
       } catch (err) {
