@@ -87,7 +87,7 @@ npm run dev</code></pre>
   <ul>
     <li><strong>Appointment & Combo Reminders:</strong> Sent automatically before scheduled time</li>
     <li><strong>Payment Status Emails:</strong> Sent for successful or failed online payments</li>
-    <li>Powered by <strong>Nodemailer</strong> and <strong>SMTP</strong> integration</li>
+    <li>Powered by <strong>Nodemailer</strong></li>
   </ul>
 
   <h2>📊 Dashboard Highlights</h2>
