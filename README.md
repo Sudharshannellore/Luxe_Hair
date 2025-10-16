@@ -1,6 +1,6 @@
 <body>
 
-  <h1>💇‍♀️ Luxe Hair — Hair Clinic Management Application</h1>
+  <h1>💇‍♀️ Luxe Hair — Hair Clinic Application</h1>
 
   <p><strong>Luxe Hair</strong> is a full-stack <strong>MERN (MongoDB, Express.js, React.js, Node.js)</strong> web application built for modern hair clinics. It provides a seamless experience for clients to <strong>book appointments, purchase combo services, and make payments (COD or Online)</strong>, while enabling admins to <strong>manage services, staff, offers, bookings, and analytics</strong> — all in one place.</p>
 
