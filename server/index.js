@@ -19,12 +19,26 @@ app.use(
     crossOriginResourcePolicy: { policy: "cross-origin" }, // images are loaded by the client/admin origins
   })
 );
+// CORS allow-list.
+//  - CLIENT_URLS entries may use "*" wildcards, e.g. https://*.vercel.app
+//  - Outside production, any localhost / 127.0.0.1 port is allowed, so Vite picking
+//    another port (5175, 4173, …) never breaks local development.
+const LOCALHOST = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+const allowList = config.clientUrls.map((url) =>
+  url.includes("*")
+    ? new RegExp(`^${url.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]+")}$`)
+    : url.replace(/\/$/, "")
+);
+const isAllowedOrigin = (origin) =>
+  allowList.some((rule) => (rule instanceof RegExp ? rule.test(origin) : rule === origin)) ||
+  (config.nodeEnv !== "production" && LOCALHOST.test(origin));
+
 app.use(
   cors({
     origin(origin, cb) {
-      // Allow non-browser clients (curl, server-to-server) and configured frontends only.
-      if (!origin || config.clientUrls.includes(origin)) return cb(null, true);
-      cb(httpError(403, `Origin ${origin} is not allowed`));
+      // Non-browser clients (curl, server-to-server) send no Origin header.
+      if (!origin || isAllowedOrigin(origin)) return cb(null, true);
+      cb(httpError(403, `Origin ${origin} is not allowed. Add it to CLIENT_URLS in server/.env.`));
     },
   })
 );
