@@ -78,6 +78,8 @@ const safe = (name, fn) => async () => {
 const runKeepAliveJob = async () => {
   const base = process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL;
   if (!base) return;
+  // A real read, so Atlas counts it as activity (it pauses idle free M0 clusters after 60 days).
+  await Order.findOne().select("_id").lean();
   const res = await fetch(`${base.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(20000) });
   console.log(`[jobs] keep-alive ping -> ${res.status}`);
 };
