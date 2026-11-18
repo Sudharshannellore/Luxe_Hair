@@ -72,10 +72,21 @@ const safe = (name, fn) => async () => {
   }
 };
 
+// Render's free tier sleeps a web service after ~15 min without inbound traffic.
+// Pinging our own PUBLIC url (not localhost) every 5 min counts as traffic and keeps it awake.
+// Render sets RENDER_EXTERNAL_URL automatically; KEEP_ALIVE_URL overrides it (e.g. a custom domain).
+const runKeepAliveJob = async () => {
+  const base = process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL;
+  if (!base) return;
+  const res = await fetch(`${base.replace(/\/$/, "")}/health`, { signal: AbortSignal.timeout(20000) });
+  console.log(`[jobs] keep-alive ping -> ${res.status}`);
+};
+
 const startJobs = () => {
   cron.schedule("0 9 * * *", safe("expiry", runExpiryJob), { timezone: config.timezone });
   cron.schedule("*/10 * * * *", safe("stale-payments", runStalePaymentJob), { timezone: config.timezone });
-  console.log("[jobs] scheduled: combo expiry (daily 09:00), unpaid checkout cleanup (every 10 min)");
+  cron.schedule("*/5 * * * *", safe("keep-alive", runKeepAliveJob));
+  console.log("[jobs] scheduled: combo expiry (daily 09:00), unpaid checkout cleanup (every 10 min), keep-alive (every 5 min)");
 };
 
-module.exports = { startJobs, runExpiryJob, runStalePaymentJob };
+module.exports = { startJobs, runExpiryJob, runStalePaymentJob, runKeepAliveJob };
