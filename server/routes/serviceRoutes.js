@@ -1,16 +1,15 @@
 const express = require("express");
 const upload = require("../utils/upload");
-const serviceController = require("../controllers/serviceController");
-
+const c = require("../controllers/serviceController");
+const validate = require("../middleware/validate");
+const s = require("../validators/schemas");
 
 const router = express.Router();
 
-router.post("/save", upload.single("image"), serviceController.createService);
-router.get("/get", serviceController.getServices);
-router.get("/get/:id", serviceController.getServiceById);
-router.put("/update/:id", upload.single("image"), serviceController.updateService);
-router.delete("/delete/:id", serviceController.deleteService);
-
-
+router.get("/get", c.getServices);
+router.get("/get/:id", c.getServiceById);
+router.post("/save", upload.single("image"), validate(s.service), c.createService);
+router.put("/update/:id", upload.single("image"), validate(s.serviceUpdate), c.updateService);
+router.delete("/delete/:id", c.deleteService);
 
 module.exports = router;

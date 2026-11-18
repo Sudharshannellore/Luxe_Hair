@@ -1,20 +1,21 @@
-// routes/couponRoutes.js
 const express = require("express");
-const router = express.Router();
-const {
-  createCoupon,
-  getCoupons,
-  getCouponById,
-  updateCoupon,
-  deleteCoupon, applyCoupon} = require("../controllers/couponController");
-const VerifyUserToken = require("../middleware/VerifyUserToken");
+const c = require("../controllers/couponController");
+const validate = require("../middleware/validate");
+const s = require("../validators/schemas");
+const { requireUser } = require("../middleware/auth");
+const { couponLimiter } = require("../middleware/rateLimit");
 
-// CRUD
-router.post("/save", createCoupon);
-router.get("/get-all", getCoupons);
-router.get("/get/:id", getCouponById);
-router.put("/update/:id", updateCoupon);
-router.delete("/delete/:id", deleteCoupon);
-router.post('/apply', VerifyUserToken, applyCoupon);
+const router = express.Router();
+
+// Public / customer
+router.get("/active", c.getActiveCoupons);
+router.post("/apply", requireUser, couponLimiter, validate(s.applyCoupon), c.applyCoupon);
+
+// Admin
+router.get("/get-all", c.getCoupons);
+router.get("/get/:id", c.getCouponById);
+router.post("/save", validate(s.coupon), c.createCoupon);
+router.put("/update/:id", validate(s.couponUpdate), c.updateCoupon);
+router.delete("/delete/:id", c.deleteCoupon);
 
 module.exports = router;

@@ -2,13 +2,13 @@ const mongoose = require("mongoose");
 
 const serviceSchema = new mongoose.Schema(
   {
-    title: { type: String, required: true },
-    category: { type: String, required: true },
-    image: { type: String, default: "no-image.png" }, // file name saved
-    price: { type: Number, required: true },
+    title: { type: String, required: true, trim: true },
+    category: { type: String, required: true, trim: true },
+    image: { type: String, default: "no-image.png" },
+    price: { type: Number, required: true, min: 0 },
     duration: { type: String, required: true },
     description: { type: String, required: true },
-    benefits: { type: [String], default: [] }
+    benefits: { type: [String], default: [] },
   },
   { timestamps: true }
 );

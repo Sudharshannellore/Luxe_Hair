@@ -1,26 +1,20 @@
-const Settings = require('../models/PaymentSettings');
+const Settings = require("../models/PaymentSettings");
 
+// Public: which payment methods customers may choose. "online" is the demo checkout.
 exports.getSettings = async (req, res) => {
-  try {
-    const settings = await Settings.findOne() || await Settings.create({});
-    res.json(settings);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+  const settings = await Settings.current();
+  res.json({
+    _id: settings._id,
+    payment: { cod: settings.payment.cod, online: settings.payment.online },
+    onlineMode: "demo",
+    updatedAt: settings.updatedAt,
+  });
 };
 
 exports.updatePaymentSettings = async (req, res) => {
-  try {
-    const { online, cod } = req.body;
-    let settings = await Settings.findOne();
-    if (!settings) settings = new Settings({ payment: {} });
-
-    if (typeof online === 'boolean') settings.payment.online = online;
-    if (typeof cod === 'boolean') settings.payment.cod = cod;
-
-    await settings.save();
-    res.json({ message: "Settings updated", settings });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+  const settings = await Settings.current();
+  if (typeof req.body.online === "boolean") settings.payment.online = req.body.online;
+  if (typeof req.body.cod === "boolean") settings.payment.cod = req.body.cod;
+  await settings.save();
+  res.json({ message: "Payment settings updated", settings });
 };

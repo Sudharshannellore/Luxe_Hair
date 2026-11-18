@@ -1,342 +1,404 @@
-import React, { useState, useEffect } from "react";
-import { Clock, User, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarDays, CheckCircle2, Clock, Mail, Phone, UserCheck, X } from "lucide-react";
+import { toast } from "sonner";
 import {
+  assignStaffToBooking,
   getAppointments,
+  getAvailableStaff,
   updateAppointmentStatus,
   updatePaymentStatus,
-  assignStaffToBooking,
 } from "../apis/appointmentApi";
-import { getActiveStaff } from "../apis/staffApi";
-import Loader from "../components/Loader";
+import { getErrorMessage, imageUrl } from "../lib/api";
+import { bookingDateKey, capitalize, formatCurrency, formatDate, formatDateTime, formatSlot } from "../lib/format";
+import { Avatar, Badge, Button, ConfirmDialog, Drawer, EmptyState, Input, PageHeader, STATUS_TONE, Skeleton } from "../components/ui";
+import { DataTable, FilterPills, Select } from "../components/ui/admin";
 
-const Appointments = () => {
-  const [selectedDate, setSelectedDate] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [appointments, setAppointments] = useState([]);
-  const [staffList, setStaffList] = useState([]);
-  const [loading, setLoading] = useState(false);
+const STATUSES = ["pending", "confirmed", "completed", "cancelled"];
 
-  // Modal state
-  const [selectedAppointment, setSelectedAppointment] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+const Detail = ({ label, children }) => (
+  <div className="flex items-start justify-between gap-4 py-2.5 text-sm">
+    <span className="text-muted">{label}</span>
+    <span className="text-right font-medium text-ink">{children}</span>
+  </div>
+);
 
-  const openAppointmentModal = (appointment) => {
-    setSelectedAppointment(appointment);
-    setIsModalOpen(true);
+function BookingDrawer({ booking, onClose, onUpdated }) {
+  const [staff, setStaff] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffId, setStaffId] = useState("");
+  const [busy, setBusy] = useState("");
+  const [confirmCancel, setConfirmCancel] = useState(false);
+
+  const dateKey = bookingDateKey(booking?.date);
+  const bookingId = booking?._id;
+  const timeSlot = booking?.timeSlot;
+
+  useEffect(() => {
+    if (!bookingId) return;
+    setStaffId("");
+    setStaffLoading(true);
+    getAvailableStaff(dateKey, timeSlot)
+      .then((list) => setStaff(list || []))
+      .catch(() => setStaff([]))
+      .finally(() => setStaffLoading(false));
+  }, [bookingId, dateKey, timeSlot]);
+
+  if (!booking) return null;
+
+  const run = async (key, fn, success) => {
+    setBusy(key);
+    try {
+      const res = await fn();
+      if (res?.booking) onUpdated(res.booking);
+      toast.success(res?.message || success);
+      return true;
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+      return false;
+    } finally {
+      setBusy("");
+    }
   };
 
-  const closeAppointmentModal = () => {
-    setSelectedAppointment(null);
-    setIsModalOpen(false);
-  };
+  const setStatus = (status) => run(`status-${status}`, () => updateAppointmentStatus(booking._id, status), `Marked ${status}`);
+  const setPayment = (paymentStatus) =>
+    run(`pay-${paymentStatus}`, () => updatePaymentStatus(booking._id, paymentStatus), "Payment updated");
+  const assign = () => run("assign", () => assignStaffToBooking(booking._id, staffId), "Stylist assigned");
 
-  // Helper to show date tile
-  const formatDateTile = (isoString) => {
-    if (!isoString) return { day: "", month: "" };
-    const d = new Date(isoString);
-    const day = d.getDate();
-    const month = d.toLocaleString("en-US", { month: "short" }).toUpperCase();
-    return { day, month };
-  };
+  const closed = booking.status === "cancelled" || booking.status === "completed";
+  const total = booking.finalPrice ?? booking.price;
 
-  // Fetch appointments and staff
-  const fetchData = async () => {
+  return (
+    <>
+      <Drawer
+        open
+        onClose={onClose}
+        title={booking.service?.title || "Booking"}
+        description={`${formatDate(booking.date, { weekday: "short" })}${booking.timeSlot ? ` · ${formatSlot(booking.timeSlot)}` : ""}`}
+        footer={
+          !closed && (
+            <div className="flex flex-wrap justify-between gap-3">
+              <Button variant="outline" onClick={() => setConfirmCancel(true)} className="!text-danger">
+                <X className="h-4 w-4" /> Cancel booking
+              </Button>
+              {booking.status === "pending" ? (
+                <Button onClick={() => setStatus("confirmed")} loading={busy === "status-confirmed"}>
+                  Confirm booking
+                </Button>
+              ) : (
+                <Button variant="gold" onClick={() => setStatus("completed")} loading={busy === "status-completed"}>
+                  <CheckCircle2 className="h-4 w-4" /> Mark completed
+                </Button>
+              )}
+            </div>
+          )
+        }
+      >
+        <div className="space-y-6">
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={STATUS_TONE[booking.status]} dot>{capitalize(booking.status)}</Badge>
+            <Badge tone={STATUS_TONE[booking.paymentStatus]}>
+              {capitalize(booking.paymentStatus)} · {booking.paymentMethod === "online" ? "Online" : "Pay at salon"}
+            </Badge>
+            {booking.cancelledBy && <Badge>Cancelled by {booking.cancelledBy}</Badge>}
+          </div>
+
+          {/* Customer */}
+          <section className="rounded-2xl border border-line/70 bg-white p-4">
+            <div className="flex items-center gap-3">
+              <Avatar name={booking.user?.username} image={booking.user?.image} />
+              <div className="min-w-0">
+                <p className="font-medium text-ink">{booking.user?.username || "Deleted user"}</p>
+                <p className="truncate text-xs text-muted">{booking.user?.email}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {booking.user?.email && (
+                <Button size="sm" variant="outline" href={`mailto:${booking.user.email}`}>
+                  <Mail className="h-3.5 w-3.5" /> Email
+                </Button>
+              )}
+              {booking.user?.phone && (
+                <Button size="sm" variant="outline" href={`tel:${booking.user.phone}`}>
+                  <Phone className="h-3.5 w-3.5" /> {booking.user.phone}
+                </Button>
+              )}
+            </div>
+          </section>
+
+          {/* Status */}
+          <section>
+            <h3 className="mb-3 text-sm font-semibold text-ink">Status</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {["pending", "confirmed", "completed"].map((s) => (
+                <button
+                  key={s}
+                  disabled={booking.status === s || booking.status === "cancelled" || !!busy}
+                  onClick={() => setStatus(s)}
+                  className={`rounded-xl border px-3 py-2 text-sm font-medium capitalize transition disabled:cursor-not-allowed ${
+                    booking.status === s ? "border-ink bg-ink text-cream" : "border-line bg-white text-ink-soft hover:border-ink/30 disabled:opacity-50"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* Stylist */}
+          <section>
+            <h3 className="mb-3 text-sm font-semibold text-ink">Stylist</h3>
+            {booking.assignedStaff ? (
+              <div className="mb-3 flex items-center gap-3 rounded-2xl bg-cream px-4 py-3">
+                <Avatar name={booking.assignedStaff.name} image={booking.assignedStaff.image} size="sm" />
+                <span className="text-sm font-medium text-ink">{booking.assignedStaff.name}</span>
+                <Badge tone="gold" className="ml-auto">Assigned</Badge>
+              </div>
+            ) : (
+              <p className="mb-3 text-sm text-muted">No stylist assigned yet.</p>
+            )}
+            {booking.status !== "cancelled" && (
+              <div className="flex gap-2">
+                {staffLoading ? (
+                  <Skeleton className="h-11 flex-1" />
+                ) : (
+                  <Select value={staffId} onChange={(e) => setStaffId(e.target.value)} aria-label="Choose stylist">
+                    <option value="">
+                      {staff.length ? (booking.assignedStaff ? "Reassign to…" : "Choose a stylist…") : "No stylists free at this time"}
+                    </option>
+                    {staff.map((s) => (
+                      <option key={s._id} value={s._id}>
+                        {s.name}
+                        {s.specialization ? ` — ${s.specialization}` : ""}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+                <Button onClick={assign} disabled={!staffId} loading={busy === "assign"}>
+                  <UserCheck className="h-4 w-4" /> Assign
+                </Button>
+              </div>
+            )}
+            {booking.timeSlot && <p className="mt-2 text-xs text-muted">Only stylists free at {formatSlot(booking.timeSlot)} on this day are listed.</p>}
+          </section>
+
+          {/* Payment */}
+          <section className="rounded-2xl border border-line/70 bg-white p-4">
+            <h3 className="mb-1 text-sm font-semibold text-ink">Payment</h3>
+            <div className="divide-y divide-line/60">
+              <Detail label="Service price">{formatCurrency(booking.price)}</Detail>
+              {booking.couponCode && <Detail label="Coupon">{booking.couponCode}</Detail>}
+              {booking.discount > 0 && <Detail label="Discount">− {formatCurrency(booking.discount)}</Detail>}
+              <Detail label="Total">
+                <span className="text-base">{formatCurrency(total)}</span>
+              </Detail>
+              <Detail label="Method">{booking.paymentMethod === "online" ? "Online (demo)" : "Pay at salon"}</Detail>
+              {booking.paymentInstrument && <Detail label="Paid with">{booking.paymentInstrument}</Detail>}
+              {booking.transactionId && <Detail label="Transaction ID">{booking.transactionId}</Detail>}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {booking.paymentStatus !== "paid" && booking.paymentStatus !== "refunded" && (
+                <Button size="sm" variant="gold" onClick={() => setPayment("paid")} loading={busy === "pay-paid"}>
+                  Mark as paid
+                </Button>
+              )}
+              {booking.paymentStatus === "paid" && (
+                <Button size="sm" variant="outline" onClick={() => setPayment("refunded")} loading={busy === "pay-refunded"}>
+                  Mark refunded
+                </Button>
+              )}
+              {booking.paymentStatus !== "pending" && booking.paymentStatus !== "failed" && (
+                <Button size="sm" variant="ghost" onClick={() => setPayment("pending")} loading={busy === "pay-pending"}>
+                  Reset to pending
+                </Button>
+              )}
+            </div>
+          </section>
+
+          <p className="text-xs text-muted">Booked {formatDateTime(booking.createdAt)} · ID {booking._id}</p>
+        </div>
+      </Drawer>
+
+      <ConfirmDialog
+        open={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        onConfirm={async () => {
+          const ok = await setStatus("cancelled");
+          if (ok) setConfirmCancel(false);
+        }}
+        loading={busy === "status-cancelled"}
+        tone="danger"
+        title="Cancel this booking?"
+        description={`The customer will be emailed that their ${booking.service?.title || ""} appointment was cancelled.${
+          booking.paymentStatus === "paid" ? " This booking was paid — remember to refund it." : ""
+        }`}
+        confirmLabel="Cancel booking"
+      />
+    </>
+  );
+}
+
+export default function Appointments() {
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("all");
+  const [date, setDate] = useState("");
+  const [selectedId, setSelectedId] = useState(null);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getAppointments();
-      setAppointments(data || []);
-      const staffData = await getActiveStaff();
-      setStaffList(staffData || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
+      setBookings((await getAppointments()) || []);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't load appointments."));
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchData();
   }, []);
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "confirmed":
-        return "bg-green-100 text-green-800";
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      case "completed":
-        return "bg-blue-100 text-blue-800";
-      case "cancelled":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const filteredAppointments = appointments.filter((appointment) => {
-    const matchesStatus =
-      statusFilter === "all" || appointment.status === statusFilter;
-    const matchesSearch =
-      (appointment.user?.email || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      (appointment.service?.title || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
-    const matchesDate =
-      !selectedDate || selectedDate === appointment.date?.split("T")[0];
-    return matchesStatus && matchesSearch && matchesDate;
-  });
+  const counts = useMemo(() => {
+    const c = { all: bookings.length };
+    STATUSES.forEach((s) => (c[s] = bookings.filter((b) => b.status === s).length));
+    return c;
+  }, [bookings]);
 
-  // Helper to refresh appointments after any update
-  const refreshAppointments = async () => {
-    await fetchData();
-  };
+  const filtered = useMemo(
+    () =>
+      bookings.filter(
+        (b) => (status === "all" || b.status === status) && (!date || bookingDateKey(b.date) === date)
+      ),
+    [bookings, status, date]
+  );
+
+  const selected = bookings.find((b) => b._id === selectedId) || null;
+
+  const onUpdated = (updated) => setBookings((list) => list.map((b) => (b._id === updated._id ? updated : b)));
+
+  const columns = useMemo(
+    () => [
+      {
+        id: "customer",
+        header: "Customer",
+        accessorFn: (b) => `${b.user?.username || ""} ${b.user?.email || ""}`,
+        cell: ({ row }) => {
+          const u = row.original.user;
+          return (
+            <div className="flex items-center gap-3">
+              <Avatar name={u?.username} image={u?.image} size="sm" />
+              <div className="min-w-0">
+                <p className="truncate font-medium text-ink">{u?.username || "Deleted user"}</p>
+                <p className="truncate text-xs text-muted">{u?.email}</p>
+              </div>
+            </div>
+          );
+        },
+      },
+      {
+        id: "service",
+        header: "Service",
+        accessorFn: (b) => b.service?.title || "",
+        cell: ({ row }) => {
+          const s = row.original.service;
+          return (
+            <div className="flex items-center gap-3">
+              {imageUrl(s?.image) && <img src={imageUrl(s.image)} alt="" className="h-9 w-9 rounded-lg object-cover" />}
+              <span className="font-medium text-ink">{s?.title || "—"}</span>
+            </div>
+          );
+        },
+      },
+      {
+        id: "when",
+        header: "Date & time",
+        accessorFn: (b) => `${bookingDateKey(b.date)} ${b.timeSlot || ""}`,
+        cell: ({ row }) => (
+          <div>
+            <p className="flex items-center gap-1.5 text-ink">
+              <CalendarDays className="h-3.5 w-3.5 text-muted" />
+              {formatDate(row.original.date)}
+            </p>
+            {row.original.timeSlot && (
+              <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
+                <Clock className="h-3 w-3" />
+                {formatSlot(row.original.timeSlot)}
+              </p>
+            )}
+          </div>
+        ),
+      },
+      {
+        id: "staff",
+        header: "Stylist",
+        accessorFn: (b) => b.assignedStaff?.name || "",
+        cell: ({ getValue }) => getValue() || <span className="text-xs text-muted">Unassigned</span>,
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ getValue }) => <Badge tone={STATUS_TONE[getValue()]} dot>{capitalize(getValue())}</Badge>,
+      },
+      {
+        accessorKey: "paymentStatus",
+        header: "Payment",
+        cell: ({ row }) => (
+          <div className="space-y-1">
+            <Badge tone={STATUS_TONE[row.original.paymentStatus]}>{capitalize(row.original.paymentStatus)}</Badge>
+            <p className="text-xs text-muted">{row.original.paymentMethod === "online" ? "Online" : "At salon"}</p>
+          </div>
+        ),
+      },
+      {
+        id: "total",
+        header: "Total",
+        accessorFn: (b) => b.finalPrice ?? b.price ?? 0,
+        cell: ({ getValue }) => <span className="font-semibold text-ink">{formatCurrency(getValue())}</span>,
+      },
+    ],
+    []
+  );
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-amber-700">Appointments</h1>
-          <p className="mt-2 text-gray-600">Manage and track all appointments</p>
-        </div>
-      </div>
+    <div>
+      <PageHeader title="Appointments" description="Confirm bookings, assign stylists and track payments." />
 
-      {/* Filters */}
-      <div className="bg-gray-50 rounded-2xl shadow-lg p-6">
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search appointments..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-pink-400"
+      <DataTable
+        columns={columns}
+        data={filtered}
+        loading={loading}
+        searchPlaceholder="Search customer, email or service…"
+        onRowClick={(b) => setSelectedId(b._id)}
+        initialSorting={[{ id: "when", desc: true }]}
+        toolbar={
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <FilterPills
+              value={status}
+              onChange={setStatus}
+              options={[{ value: "all", label: "All", count: counts.all }, ...STATUSES.map((s) => ({ value: s, label: capitalize(s), count: counts[s] }))]}
             />
+            <div className="flex items-center gap-2">
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-10 w-44" aria-label="Filter by date" />
+              {date && (
+                <Button size="sm" variant="ghost" onClick={() => setDate("")}>
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
-
-          {/* Date */}
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-pink-400"
+        }
+        emptyState={
+          <EmptyState
+            icon={CalendarDays}
+            title={bookings.length ? "No matching appointments" : "No appointments yet"}
+            description={bookings.length ? "Try a different status, date or search." : "New bookings from the website will appear here."}
           />
+        }
+      />
 
-          {/* Status filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-pink-400"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="completed">Completed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-
-        {/* Appointments List */}
-        {loading ? (
-          <div className="flex justify-center py-10">
-            <Loader />
-          </div>
-        ) : filteredAppointments.length === 0 ? (
-          <p className="text-gray-600 text-center">No appointments found</p>
-        ) : (
-          <div className="space-y-4">
-            {filteredAppointments.map((appointment) => {
-              const { day, month } = formatDateTile(appointment.updatedAt);
-              return (
-                <div
-                  key={appointment._id}
-                  className="border border-gray-200 rounded-xl p-4 hover:bg-gray-200 transition-colors shadow-sm"
-                >
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
-                    {/* Info */}
-                    <div className="flex items-center space-x-4">
-                      {/* Date Tile */}
-                      <div
-                        onClick={() => openAppointmentModal(appointment)}
-                        className="w-14 h-14 bg-amber-100 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:scale-105 transform transition"
-                      >
-                        <span className="text-lg font-bold text-amber-700">{day}</span>
-                        <span className="text-xs font-medium text-amber-600">{month}</span>
-                      </div>
-
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {appointment.service?.title}
-                        </h3>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-1 sm:space-y-0 sm:space-x-4 text-sm text-gray-600 mt-1">
-                          <span className="flex items-center">
-                            <Clock className="h-4 w-4 mr-1" />
-                            {appointment.time} ({appointment.service?.duration})
-                          </span>
-                          <span className="flex items-center">
-                            <User className="h-4 w-4 mr-1" />
-                            {appointment.user?.email}
-                          </span>
-                          <span className="font-semibold">
-                            ₹ {appointment.service?.finalPrice ?? appointment.finalPrice ?? 0}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 mt-3 sm:mt-0">
-                      {/* Status Dropdown */}
-                      <select
-                        value={appointment.status}
-                        onChange={async (e) => {
-                          try {
-                            await updateAppointmentStatus(appointment._id, e.target.value);
-                            await refreshAppointments();
-                          } catch (err) {
-                            console.error("Error updating status:", err);
-                          }
-                        }}
-                        className={`px-3 py-1 rounded-lg text-sm font-medium cursor-pointer ${getStatusColor(
-                          appointment.status
-                        )}`}
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="confirmed">Confirmed</option>
-                        <option value="completed">Completed</option>
-                      </select>
-
-                      {/* Payment Status Dropdown */}
-                      <select
-                        value={appointment.paymentStatus}
-                        onChange={async (e) => {
-                          try {
-                            await updatePaymentStatus(appointment._id, e.target.value);
-                            await refreshAppointments();
-                          } catch (err) {
-                            console.error("Error updating payment status:", err);
-                          }
-                        }}
-                        className="px-3 py-1 rounded-lg text-sm font-medium border border-gray-300 cursor-pointer"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="paid">Paid</option>
-                      </select>
-
-                      {/* Staff Assign Dropdown */}
-                      <select
-                        value={appointment.assignedStaff?._id || ""}
-                        onChange={async (e) => {
-                          try {
-                            const selectedStaffId = e.target.value;
-                            if (selectedStaffId) {
-                              await assignStaffToBooking(appointment._id, selectedStaffId);
-                              await refreshAppointments();
-                            }
-                          } catch (err) {
-                            console.error("Error assigning staff:", err);
-                          }
-                        }}
-                        className="px-3 py-1 rounded-lg text-sm font-medium border border-gray-300 cursor-pointer"
-                      >
-                        <option value="">
-                          {appointment.assignedStaff
-                            ? `Assigned: ${appointment.assignedStaff.name}`
-                            : "Assign Staff"}
-                        </option>
-                        {staffList.map((staff) => (
-                          <option key={staff._id} value={staff._id}>
-                            {staff.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Appointment Modal */}
-      {isModalOpen && selectedAppointment && (
-        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full max-h-[80vh] p-6 relative overflow-y-auto animate-fadeIn">
-            <button
-              onClick={closeAppointmentModal}
-              className="absolute top-3 right-3 text-gray-500 hover:text-gray-800 text-xl font-bold"
-            >
-              ✕
-            </button>
-
-            <h2 className="text-2xl font-bold mb-4 text-amber-600">
-              Appointment Details
-            </h2>
-
-            {/* User Info */}
-            <div className="mb-4">
-              <h3 className="font-semibold text-gray-700 mb-1">User</h3>
-              <p className="text-gray-800">Name: {selectedAppointment.user?.username}</p>
-              <p className="text-gray-800">Email: {selectedAppointment.user?.email}</p>
-              <p className="text-gray-800">Price: ₹{selectedAppointment.price}</p>
-              {selectedAppointment.couponCode && (
-              <p className="text-gray-800">Code: {selectedAppointment.couponCode}</p>
-                )}
-              {selectedAppointment.discount && (
-              <p className="text-gray-800">Discount: %{selectedAppointment.discount}</p>
-                )}
-              {selectedAppointment.finalPrice && (
-              <p className="text-gray-800">Total: ₹{selectedAppointment.finalPrice}</p>
-                )}                                
-            </div>
-
-            {/* Service Info */}
-            <div className="mb-4">
-              <h3 className="font-semibold text-gray-700 mb-1">Service</h3>
-              <p className="text-gray-800">Title: {selectedAppointment.service?.title}</p>
-              <p className="text-gray-800">Category: {selectedAppointment.service?.category}</p>
-              <p className="text-gray-800">Duration: {selectedAppointment.service?.duration}</p>
-              <p className="text-gray-800">Description: {selectedAppointment.service?.description}</p>
-              <p className="text-gray-800">
-                Benefits: {selectedAppointment.service?.benefits?.join(", ")}
-              </p>
-            </div>
-
-            {/* Assigned Staff */}
-            {selectedAppointment.assignedStaff && (
-              <div className="mb-4">
-                <h3 className="font-semibold text-gray-700 mb-1">Assigned Staff</h3>
-                <p className="text-gray-800">Name: {selectedAppointment.assignedStaff.name}</p>
-                <p className="text-gray-800">Email: {selectedAppointment.assignedStaff.email}</p>
-              </div>
-            )}
-
-            {/* Reviews */}
-            {selectedAppointment.reviews?.length > 0 && (
-              <div className="max-h-64 overflow-y-auto">
-                <h3 className="font-semibold text-gray-700 mb-2">Reviews</h3>
-                {selectedAppointment.reviews.map((review, index) => (
-                  <div
-                    key={index}
-                    className="border-t border-gray-200 pt-2 mb-2 text-gray-800"
-                  >
-                    <p className="italic">"{review.comment}"</p>
-                    <p>Rating: {review.rating} / 5</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {selected && <BookingDrawer booking={selected} onClose={() => setSelectedId(null)} onUpdated={onUpdated} />}
     </div>
   );
-};
-
-export default Appointments;
+}

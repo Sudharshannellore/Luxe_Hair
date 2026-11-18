@@ -1,51 +1,75 @@
-const express = require('express')
-const dotenv = require("dotenv");
-const cors = require('cors');
-const mongoose = require('mongoose')
+const config = require("./config"); // loads .env first
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const mongoose = require("mongoose");
 const path = require("path");
-const userRoute = require('./routes/userRoutes');
-const serviceRoute = require('./routes/serviceRoutes');
-const packageRoute = require('./routes/packageRoutes')
-const serviceBookingRoute = require('./routes/serviceBookingRoutes')
-const packageOrderRoute = require('./routes/packageOrderRoute')
-const dashboardRoute = require('./routes/dashboardRoute')
-const staffRoutes = require('./routes/staffRoutes')
-const reviewRoutes = require("./routes/reviewRoute")
-const messageRoute = require('./routes/messageRoutes')
-const paymentRoutes = require('./routes/paymentSettingRoute');
-const articleRoutes = require('./routes/articleRoutes')
-const couponRoutes = require('./routes/couponRoute')
 
-dotenv.config();
+const { notFound, errorHandler } = require("./middleware/errorHandler");
+const { apiLimiter } = require("./middleware/rateLimit");
+const { httpError } = require("./utils/httpError");
+const { startJobs } = require("./orderJobs");
+const Message = require("./models/Message");
 
-const app = express()
-app.use(cors());
-app.use(express.json()); 
-app.use(express.urlencoded({ extended: true }));
+const app = express();
+app.set("trust proxy", 1); // correct client IPs behind Render/Railway/NGINX for rate limiting
 
-// Database Connection
-mongoose.connect(process.env.MONGO_URL)
-.then(() => console.log("MongoDB Successfully Connected"))
-.catch((error) => console.error("MongoDB connection error:", error));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }, // images are loaded by the client/admin origins
+  })
+);
+app.use(
+  cors({
+    origin(origin, cb) {
+      // Allow non-browser clients (curl, server-to-server) and configured frontends only.
+      if (!origin || config.clientUrls.includes(origin)) return cb(null, true);
+      cb(httpError(403, `Origin ${origin} is not allowed`));
+    },
+  })
+);
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+app.use(apiLimiter);
 
-// Serve uploaded files (publicly accessible)
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "uploads"), { maxAge: "7d" }));
 
-// Routes
-app.use('/user', userRoute);
-app.use('/service', serviceRoute);
-app.use('/package', packageRoute);
-app.use('/booking', serviceBookingRoute)
-app.use('/order', packageOrderRoute);
-app.use('/dashboard', dashboardRoute);
-app.use('/staff', staffRoutes);
-app.use('/review', reviewRoutes);
-app.use('/message', messageRoute);
-app.use('/payment', paymentRoutes);
-app.use('/article', articleRoutes)
-app.use('/coupon', couponRoutes);
+app.get("/", (req, res) => res.json({ name: `${config.brandName} API`, status: "ok" }));
+app.get("/health", (req, res) =>
+  res.json({ status: "ok", db: mongoose.connection.readyState === 1 ? "connected" : "disconnected" })
+);
 
-const port = process.env.PORT || 5000;
+app.use("/user", require("./routes/userRoutes"));
+app.use("/service", require("./routes/serviceRoutes"));
+app.use("/package", require("./routes/packageRoutes"));
+app.use("/booking", require("./routes/serviceBookingRoutes"));
+app.use("/order", require("./routes/packageOrderRoute"));
+app.use("/dashboard", require("./routes/dashboardRoute"));
+app.use("/staff", require("./routes/staffRoutes"));
+app.use("/review", require("./routes/reviewRoute"));
+app.use("/message", require("./routes/messageRoutes"));
+app.use("/payment", require("./routes/paymentSettingRoute"));
+app.use("/article", require("./routes/articleRoutes"));
+app.use("/coupon", require("./routes/couponRoute"));
 
-app.get('/', (req, res) => res.send('Hello World!'))
-app.listen(port, () => console.log(`Server Running on port ${port}!`))
+app.use(notFound);
+app.use(errorHandler);
+
+const start = async () => {
+  try {
+    await mongoose.connect(config.mongoUrl);
+    console.log("MongoDB connected");
+    // Drops the old unique index on message email so people can message more than once.
+    await Message.syncIndexes().catch((err) => console.warn("Message index sync skipped:", err.message));
+  } catch (error) {
+    console.error("MongoDB connection error:", error.message);
+    process.exit(1);
+  }
+
+  app.listen(config.port, () => console.log(`Server running on port ${config.port}`));
+  startJobs();
+};
+
+if (require.main === module) start();
+
+module.exports = app;

@@ -1,24 +1,19 @@
 const express = require("express");
+const c = require("../controllers/packageOrderController");
+const validate = require("../middleware/validate");
+const s = require("../validators/schemas");
+const { requireUser } = require("../middleware/auth");
+
 const router = express.Router();
-const orderController = require("../controllers/packageOrderController");
-const VerifyUserToken = require("../middleware/VerifyUserToken");
 
-// Create order
-router.post("/place", VerifyUserToken, orderController.createOrder);
+// Customer
+router.post("/place", requireUser, validate(s.createOrder), c.createOrder);
+router.get("/get", requireUser, c.getMyOrders);
 
-// Get all orders
-router.get("/get-all", orderController.getAllOrders);
-
-// Get my orders
-router.get("/get", VerifyUserToken, orderController.getMyOrders);
-
-// Use service (Admin)
-router.patch("/use-service", orderController.useService);
-
-// Assign staff
-router.post("/assign-staff", orderController.assignStaffToService);
-
-// Update payment status
-router.patch("/update-payment/:id", orderController.updatePayment);
+// Admin
+router.get("/get-all", c.getAllOrders);
+router.patch("/use-service", validate(s.useService), c.useService);
+router.post("/assign-staff", validate(s.assignOrderStaff), c.assignStaffToService);
+router.patch("/update-payment/:id", validate(s.paymentStatus), c.updatePayment);
 
 module.exports = router;

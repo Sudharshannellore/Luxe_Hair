@@ -1,23 +1,16 @@
-// ScrollToTopOnMount.jsx
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
+/** Scrolls to the top on route change, or to #hash targets when present. */
 export default function ScrollToTopOnMount({ children }) {
   const { pathname, hash } = useLocation();
 
   useEffect(() => {
     if (hash) {
-      // Wait for Home to render before scrolling
-      setTimeout(() => {
-        const id = hash.replace('#', '');
-        const el = document.getElementById(id);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 0);
-    } else {
-      window.scrollTo(0, 0);
+      const t = setTimeout(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "smooth" }), 50);
+      return () => clearTimeout(t);
     }
+    window.scrollTo({ top: 0, behavior: "instant" });
   }, [pathname, hash]);
 
   return children;

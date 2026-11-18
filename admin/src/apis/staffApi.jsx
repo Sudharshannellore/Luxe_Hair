@@ -1,51 +1,21 @@
-import axios from "axios";
+import api from "../lib/api";
 
-const API_URI = import.meta.env.VITE_API_URL
-const API_URL = `${API_URI}/staff`; // Change to your backend URL
-
-// Get all staff
-export const getAllStaff = async () => {
-  const response = await axios.get(`${API_URL}/get`);
-  return response.data;
-};
-
-// Create new staff
-export const createStaff = async (staffData) => {
-  const formData = new FormData();
-  for (const key in staffData) {
-    if (staffData[key] !== null && staffData[key] !== undefined) {
-      formData.append(key, staffData[key]); // no JSON.stringify
-    }
-  }
-  const response = await axios.post(`${API_URL}/save`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
+/** Builds multipart form data from a plain object (skips undefined/null; File kept as-is). */
+const toFormData = (data) => {
+  const fd = new FormData();
+  Object.entries(data).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") fd.append(k, v);
   });
-  return response.data.staff;
+  return fd;
 };
 
+export const getAllStaff = async () => (await api.get("/staff/get")).data;
+export const createStaff = async (data) => (await api.post("/staff/save", toFormData(data))).data;
+export const updateStaff = async (id, data) => (await api.put(`/staff/update/${id}`, toFormData(data))).data;
+export const deleteStaff = async (id) => (await api.delete(`/staff/delete/${id}`)).data;
 
-// Update staff
-export const updateStaff = async (id, staffData) => {
-  const formData = new FormData();
-  for (const key in staffData) {
-    if (staffData[key] !== null && staffData[key] !== undefined) {
-      formData.append(key, staffData[key]); // no JSON.stringify
-    }
-  }
-  const response = await axios.put(`${API_URL}/update/${id}`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return response.data.staff;
-};
-
-// Delete staff
-export const deleteStaff = async (id) => {
-  const response = await axios.delete(`${API_URL}/delete/${id}`);
-  return response.data;
-};
-
-// Get all staff
-export const getActiveStaff = async () => {
-  const response = await axios.get(`${API_URL}/active-staff`);
-  return response.data;
-};
+/**
+ * Active staff who can be assigned. Pass { date: "YYYY-MM-DD", timeSlot: "HH:mm" }
+ * to exclude staff already booked in that slot.
+ */
+export const getActiveStaff = async (params = {}) => (await api.get("/staff/active-staff", { params })).data;

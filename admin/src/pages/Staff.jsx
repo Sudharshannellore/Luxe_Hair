@@ -1,307 +1,302 @@
-import React, { useState, useEffect } from "react";
-import { getAllStaff, createStaff, updateStaff, deleteStaff } from "../apis/staffApi";
-import { Pen, Trash } from "lucide-react";
-import Loader from "../components/Loader";
-const Staff = () => {
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Briefcase, Mail, MapPin, Pencil, Phone, Plus, Search, Trash2, Users } from "lucide-react";
+import { toast } from "sonner";
+import { Avatar, Badge, Button, Card, ConfirmDialog, Drawer, EmptyState, Field, Input, PageHeader, Skeleton, Textarea } from "../components/ui";
+import { FilterPills, IconButton, ImageUpload, Switch } from "../components/ui/admin";
+import { getErrorMessage, imageUrl } from "../lib/api";
+import { createStaff, deleteStaff, getAllStaff, updateStaff } from "../apis/staffApi";
 
-  const API_URL = import.meta.env.VITE_API_URL
+const EMPTY = { name: "", email: "", phone: "", experience: "", specialization: "", address: "", status: "active" };
 
-  const [staffList, setStaffList] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingStaff, setEditingStaff] = useState(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    specialization: "",
-    experience: "",
-    address: "",
-    image: null,
-  });
-  const [loading, setLoading] = useState(false);
-
-  // Fetch staff
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const data = await getAllStaff();
-        setStaffList(data || []);
-      } catch (err) {
-        console.error("Error fetching staff:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  // Open modal for Add
-  const handleAdd = () => {
-    setEditingStaff(null);
-    setFormData({
-      name: "",
-      email: "",
-      phone: "",
-      specialization: "",
-      experience: "",
-      address: "",
-      image: null,
-    });
-    setIsModalOpen(true);
-  };
-
-  // Open modal for Edit
-  const handleEdit = (staff) => {
-    setEditingStaff(staff);
-    setFormData({
-      name: staff.name || "",
-      email: staff.email || "",
-      phone: staff.phone || "",
-      specialization: staff.specialization || "",
-      experience: staff.experience || "",
-      address: staff.address || "",
-      image: null,
-    });
-    setIsModalOpen(true);
-  };
-
-  // Handle form input change
-  const handleChange = (e) => {
-    const { name, value, files } = e.target;
-    if (files) setFormData({ ...formData, [name]: files[0] });
-    else setFormData({ ...formData, [name]: value });
-  };
-
-  // Handle form submit
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const dataToSend = { ...formData };
-      let savedStaff;
-      if (editingStaff) {
-        savedStaff = await updateStaff(editingStaff._id, dataToSend);
-        setStaffList((prev) =>
-          prev.map((s) => (s._id === editingStaff._id ? savedStaff : s))
-        );
-      } else {
-        savedStaff = await createStaff(dataToSend);
-        setStaffList((prev) => [savedStaff, ...prev]);
-      }
-      setIsModalOpen(false);
-    } catch (err) {
-      console.error("Error saving staff:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Delete staff
-  const handleDelete = async (id) => {
-    setLoading(true);
-    try {
-      await deleteStaff(id);
-      setStaffList((prev) => prev.filter((s) => s._id !== id));
-    } catch (err) {
-      console.error("Error deleting staff:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Filter staff by search
-  const filteredStaff = staffList.filter(
-    (staff) =>
-      (staff.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (staff.email || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (staff.specialization?.join(" ") || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase())
-  );
-
-  return (
-    <div className="p-6 bg-white rounded-xl shadow-lg relative">
-      {/* Loader */}
-      {loading && <Loader />}
-
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Staff Management</h1>
-        <button
-          onClick={handleAdd}
-          className="mt-2 sm:mt-0 px-4 py-2 bg-amber-700 text-white rounded-lg "
-        >
-          Add Staff
-        </button>
-      </div>
-
-      {/* Search */}
-      <input
-        type="text"
-        placeholder="Search staff..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className="w-full mb-4 px-4 py-2 border border-gray-300 rounded-lg"
-      />
-
-      {/* Staff Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Image</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Name</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Email</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Phone</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Specialization</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Experience</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Address</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Status</th>
-              <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredStaff.map((staff) => (
-              <tr key={staff._id}>
-                <td className="px-4 py-2">
-                  <img
-                    src={`${API_URL}/uploads/${staff.image}`}
-                    alt={staff.name}
-                    className="w-12 h-12 object-cover rounded-xl"
-                  />
-                </td>
-                <td className="px-4 py-2">{staff.name}</td>
-                <td className="px-4 py-2">{staff.email}</td>
-                <td className="px-4 py-2">{staff.phone}</td>
-                <td className="px-4 py-2">{staff.specialization}</td>
-                <td className="px-4 py-2">{staff.experience}</td>
-                <td className="px-4 py-2">{staff.address}</td>
-                <td>
-                  <span
-                    className={`px-2 py-1 rounded-full text-sm font-semibold ${
-                      staff.status?.toLowerCase() === "active"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {staff.status}
-                  </span>
-                </td>
-                <td className="px-4 py-2 space-x-2">
-                  <button
-                    onClick={() => handleEdit(staff)}
-                    className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                  >
-                    <Pen className="w-4 h-4 text-white" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(staff._id)}
-                    className="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                  >
-                    <Trash className="w-4 h-4 text-white" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {filteredStaff.length === 0 && (
-              <tr>
-                <td colSpan={8} className="text-center py-4 text-gray-500">
-                  No staff found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 relative">
-            <h2 className="text-xl font-bold mb-4">
-              {editingStaff ? "Edit Staff" : "Add Staff"}
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <input
-                type="text"
-                name="name"
-                placeholder="Name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="email"
-                name="email"
-                placeholder="Email"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="text"
-                name="phone"
-                placeholder="Phone"
-                value={formData.phone}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="text"
-                name="specialization"
-                placeholder="Specialization"
-                value={formData.specialization}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="text"
-                name="experience"
-                placeholder="Experience"
-                value={formData.experience}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="text"
-                name="address"
-                placeholder="Address"
-                value={formData.address}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="file"
-                name="image"
-                onChange={handleChange}
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <div className="flex justify-end space-x-2 mt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-gray-300 rounded-lg hover:bg-gray-400"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-amber-700 text-white rounded-lg"
-                >
-                  {editingStaff ? "Update" : "Add"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+const validate = (f) => {
+  const e = {};
+  if (f.name.trim().length < 2) e.name = "Enter a name";
+  if (!/^\S+@\S+\.\S+$/.test(f.email.trim())) e.email = "Enter a valid email";
+  if (f.phone.trim().length < 7) e.phone = "Enter a valid phone number";
+  if (!f.experience.trim()) e.experience = "e.g. 5 years";
+  if (f.specialization.trim().length < 2) e.specialization = "Enter a specialization";
+  if (f.address.trim().length < 2) e.address = "Enter an address";
+  return e;
 };
 
-export default Staff;
+export default function Staff() {
+  const [staff, setStaff] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState(EMPTY);
+  const [image, setImage] = useState(null);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [toggling, setToggling] = useState(null);
+
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setStaff(await getAllStaff());
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't load staff"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const counts = useMemo(
+    () => ({ all: staff.length, active: staff.filter((s) => s.status === "active").length, inactive: staff.filter((s) => s.status !== "active").length }),
+    [staff]
+  );
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return staff.filter(
+      (s) =>
+        (status === "all" || (status === "active" ? s.status === "active" : s.status !== "active")) &&
+        (!q || [s.name, s.email, s.phone, s.specialization].join(" ").toLowerCase().includes(q))
+    );
+  }, [staff, query, status]);
+
+  const openForm = (member) => {
+    setEditing(member || {});
+    setForm(
+      member
+        ? {
+            name: member.name || "",
+            email: member.email || "",
+            phone: member.phone || "",
+            experience: member.experience || "",
+            specialization: member.specialization || "",
+            address: member.address || "",
+            status: member.status || "active",
+          }
+        : EMPTY
+    );
+    setImage(null);
+    setErrors({});
+  };
+  const closeForm = () => !saving && setEditing(null);
+
+  const replace = (updated) => setStaff((list) => list.map((s) => (s._id === updated._id ? updated : s)));
+
+  const save = async (e) => {
+    e?.preventDefault();
+    const errs = validate(form);
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+
+    const payload = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, typeof v === "string" ? v.trim() : v]));
+    if (image) payload.image = image;
+
+    setSaving(true);
+    try {
+      if (editing?._id) {
+        const { staff: updated } = await updateStaff(editing._id, payload);
+        replace(updated);
+        toast.success("Staff member updated");
+      } else {
+        const { staff: created } = await createStaff(payload);
+        setStaff((list) => [created, ...list]);
+        toast.success("Staff member added");
+      }
+      setEditing(null);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't save the staff member"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleStatus = async (member, active) => {
+    setToggling(member._id);
+    try {
+      const { staff: updated } = await updateStaff(member._id, { status: active ? "active" : "inactive" });
+      replace(updated);
+      toast.success(`${member.name} is now ${active ? "active" : "inactive"}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't update status"));
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteStaff(toDelete._id);
+      setStaff((list) => list.filter((s) => s._id !== toDelete._id));
+      toast.success("Staff member removed");
+      setToDelete(null);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't remove the staff member"));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  return (
+    <div>
+      <PageHeader
+        title="Staff"
+        description="Stylists who can be assigned to appointments and combo services."
+        actions={
+          <Button onClick={() => openForm()}>
+            <Plus className="h-4 w-4" /> Add staff
+          </Button>
+        }
+      />
+
+      {!loading && staff.length > 0 && (
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="w-full sm:max-w-xs">
+            <Input icon={Search} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search staff…" className="h-10" />
+          </div>
+          <FilterPills
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "all", label: "All", count: counts.all },
+              { value: "active", label: "Active", count: counts.active },
+              { value: "inactive", label: "Inactive", count: counts.inactive },
+            ]}
+          />
+        </div>
+      )}
+
+      {loading ? (
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="space-y-4 p-6">
+              <div className="flex items-center gap-4">
+                <Skeleton className="h-16 w-16 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-5 w-2/3" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              </div>
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </Card>
+          ))}
+        </div>
+      ) : visible.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title={staff.length ? "No matching staff" : "No staff yet"}
+          description={staff.length ? "Try a different search or filter." : "Add your stylists so you can assign them to bookings."}
+          action={!staff.length && <Button onClick={() => openForm()}><Plus className="h-4 w-4" /> Add staff</Button>}
+        />
+      ) : (
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          {visible.map((m) => (
+            <Card key={m._id} className="flex flex-col p-6">
+              <div className="flex items-start gap-4">
+                <Avatar name={m.name} image={m.image} size="lg" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="truncate font-display text-2xl leading-tight">{m.name}</h3>
+                    <Badge tone={m.status === "active" ? "success" : "neutral"} dot>
+                      {m.status === "active" ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 text-sm text-gold-dark">{m.specialization}</p>
+                </div>
+              </div>
+
+              <ul className="mb-5 mt-5 space-y-2 text-sm text-ink-soft">
+                <li className="flex items-center gap-2"><Briefcase className="h-4 w-4 shrink-0 text-muted" /> {m.experience} experience</li>
+                <li className="flex items-center gap-2 truncate"><Mail className="h-4 w-4 shrink-0 text-muted" /> <a href={`mailto:${m.email}`} className="truncate hover:text-ink">{m.email}</a></li>
+                <li className="flex items-center gap-2"><Phone className="h-4 w-4 shrink-0 text-muted" /> <a href={`tel:${m.phone}`} className="hover:text-ink">{m.phone}</a></li>
+                <li className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted" /> <span className="line-clamp-2">{m.address}</span></li>
+              </ul>
+
+              <div className="mt-auto flex items-center justify-between gap-3 border-t border-line/70 pt-4">
+                <div className="flex-1">
+                  <Switch
+                    label="Active"
+                    description="Can be assigned"
+                    checked={m.status === "active"}
+                    disabled={toggling === m._id}
+                    onChange={(checked) => toggleStatus(m, checked)}
+                  />
+                </div>
+                <div className="flex gap-1">
+                  <IconButton icon={Pencil} label="Edit" onClick={() => openForm(m)} />
+                  <IconButton icon={Trash2} label="Remove" tone="danger" onClick={() => setToDelete(m)} />
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Drawer
+        open={editing !== null}
+        onClose={closeForm}
+        dismissible={!saving}
+        title={editing?._id ? "Edit staff member" : "Add staff member"}
+        description={editing?._id ? editing.name : "Active staff appear on the website's stylist section."}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={closeForm} disabled={saving}>Cancel</Button>
+            <Button onClick={save} loading={saving}>{editing?._id ? "Save changes" : "Add staff member"}</Button>
+          </div>
+        }
+      >
+        <form onSubmit={save} className="space-y-5" noValidate>
+          <ImageUpload value={imageUrl(editing?.image)} onChange={setImage} label="Photo" />
+          <Field label="Full name" htmlFor="st-name" error={errors.name}>
+            <Input id="st-name" value={form.name} onChange={set("name")} autoComplete="off" />
+          </Field>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Email" htmlFor="st-email" error={errors.email}>
+              <Input id="st-email" type="email" value={form.email} onChange={set("email")} autoComplete="off" />
+            </Field>
+            <Field label="Phone" htmlFor="st-phone" error={errors.phone}>
+              <Input id="st-phone" type="tel" value={form.phone} onChange={set("phone")} autoComplete="off" />
+            </Field>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Specialization" htmlFor="st-spec" error={errors.specialization}>
+              <Input id="st-spec" value={form.specialization} onChange={set("specialization")} placeholder="Colour expert" />
+            </Field>
+            <Field label="Experience" htmlFor="st-exp" error={errors.experience}>
+              <Input id="st-exp" value={form.experience} onChange={set("experience")} placeholder="5 years" />
+            </Field>
+          </div>
+          <Field label="Address" htmlFor="st-address" error={errors.address}>
+            <Textarea id="st-address" rows={2} value={form.address} onChange={set("address")} />
+          </Field>
+          <div className="rounded-2xl border border-line bg-white p-4">
+            <Switch
+              label="Active (can be assigned)"
+              description="Inactive staff are hidden from assignment lists and the website. Availability per time slot is checked automatically."
+              checked={form.status === "active"}
+              onChange={(checked) => setForm((f) => ({ ...f, status: checked ? "active" : "inactive" }))}
+            />
+          </div>
+          <button type="submit" className="hidden" />
+        </form>
+      </Drawer>
+
+      <ConfirmDialog
+        open={Boolean(toDelete)}
+        onClose={() => !deleting && setToDelete(null)}
+        onConfirm={confirmDelete}
+        loading={deleting}
+        tone="danger"
+        title="Remove staff member?"
+        description={`${toDelete?.name} will be removed permanently. To keep their history, set them to inactive instead.`}
+        confirmLabel="Remove"
+      />
+    </div>
+  );
+}

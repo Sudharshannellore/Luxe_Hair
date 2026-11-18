@@ -1,380 +1,405 @@
-import React, { useEffect, useState } from 'react';
-import { Check, ShoppingCart, Loader2, X, ChevronDownCircle } from 'lucide-react';
-import axios from 'axios';
-import { ToastContainer, toast, Bounce } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import Loader from '../components/Loader';
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { CalendarClock, Check, Crown, Package, ShieldCheck, Sparkles, Wallet } from "lucide-react";
+import { toast } from "sonner";
+import api, { getErrorMessage, imageUrl } from "../lib/api";
+import { formatCurrency } from "../lib/format";
+import { payOnline } from "../lib/demoPayment";
+import { useAuth } from "../context/AuthContext";
+import { Badge, Button, CardSkeleton, cx, EmptyState, Modal, PriceSummary } from "../components/ui";
+import { CinematicHeader, CouponPicker, PaymentMethodPicker, SuccessPanel, useCheckoutOptions } from "../components/checkout";
+import { AmbientBlobs, CountUp, Grain, Reveal, Spotlight, Stagger, StaggerItem, TiltCard } from "../components/fx";
 
-function Combos() {
-  const API_URL = import.meta.env.VITE_API_URL;
+const HERO = "https://images.pexels.com/photos/3065209/pexels-photo-3065209.jpeg?auto=compress&cs=tinysrgb&w=1600";
+const FALLBACK_IMG = "https://images.pexels.com/photos/3993449/pexels-photo-3993449.jpeg?auto=compress&cs=tinysrgb&w=800";
 
-  const [packages, setPackages] = useState([]);
-  const [loadingPackageId, setLoadingPackageId] = useState(null);
-  const [loadingFetch, setLoadingFetch] = useState(false);
-  const [selectedPackage, setSelectedPackage] = useState(null);
+/* ------------------------------------------------------------------ Combo card */
 
-  const [showConfirmPopup, setShowConfirmPopup] = useState(false);
-  const [showFinalConfirm, setShowFinalConfirm] = useState(false);
-  const [showPaymentDashboard, setShowPaymentDashboard] = useState(false);
+function ComboCard({ combo, featured, worth, onBuy }) {
+  const validity = combo.validityDays || 30;
+  const saving = worth > combo.price ? worth - combo.price : 0;
 
-  const [paymentMethod, setPaymentMethod] = useState('cod');
+  const card = (
+    <article
+      className={cx(
+        "group relative flex h-full flex-col overflow-hidden rounded-card",
+        featured ? "bg-cream text-ink shadow-[0_30px_80px_-20px_rgba(176,141,87,0.55)]" : "border border-white/10 bg-white/[0.04] text-cream backdrop-blur"
+      )}
+    >
+      {featured && (
+        <div className="absolute -right-12 top-7 z-20 rotate-45 bg-gradient-to-r from-gold-dark via-gold to-gold-dark px-12 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] text-white shadow-lg">
+          <span className="inline-flex items-center gap-1">
+            <Crown className="h-3 w-3" aria-hidden /> Most popular
+          </span>
+        </div>
+      )}
+      <div className="shine relative h-48 overflow-hidden">
+        <img
+          src={imageUrl(combo.image, FALLBACK_IMG)}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover transition duration-[1.2s] ease-out group-hover:scale-110"
+        />
+        <div className={cx("absolute inset-0", featured ? "bg-gradient-to-t from-cream via-cream/20 to-transparent" : "bg-gradient-to-t from-ink via-ink/40 to-transparent")} />
+        {saving > 0 && (
+          <span className="absolute left-4 top-4 rounded-full bg-success px-3 py-1 text-xs font-semibold text-white shadow">
+            Save {formatCurrency(saving)}
+          </span>
+        )}
+      </div>
 
-  // --- Coupon ---
-  const [coupons, setCoupons] = useState([]);
-  const [couponData, setCouponData] = useState({ code: '', discount: 0, finalAmount: 0 });
-  const [couponError, setCouponError] = useState('');
+      <div className="relative -mt-12 flex flex-1 flex-col px-7 pb-7">
+        <h3 className={cx("font-display text-4xl font-medium", featured ? "text-ink" : "!text-cream")}>{combo.title}</h3>
+        <p className={cx("mt-1 text-sm", featured ? "text-muted" : "text-cream/60")}>{combo.subtitle}</p>
 
-  // Pagination
-  const [visibleCount, setVisibleCount] = useState(3);
+        <div className="mt-6 flex items-baseline gap-2">
+          <span className={cx("font-display text-6xl font-semibold leading-none", featured ? "text-gold-gradient" : "text-gold-light")}>
+            <CountUp to={combo.price} prefix="₹" duration={1.6} />
+          </span>
+          {worth > combo.price && (
+            <span className={cx("text-sm line-through", featured ? "text-muted" : "text-cream/40")}>{formatCurrency(worth)}</span>
+          )}
+        </div>
+        <p className={cx("mt-3 inline-flex items-center gap-1.5 text-xs", featured ? "text-muted" : "text-cream/60")}>
+          <CalendarClock className="h-3.5 w-3.5" aria-hidden /> Valid for {validity} days · {combo.services?.length || 0} services
+        </p>
 
-  const toastOptions = {
-    position: 'top-right',
-    autoClose: 2000,
-    theme: 'colored',
-    transition: Bounce,
-  };
+        <div className={cx("my-6 h-px", featured ? "bg-line" : "bg-white/10")} />
 
-  // Fetch Packages & Coupons
-  const fetchPackages = async () => {
-    try {
-      setLoadingFetch(true);
-      const res = await axios.get(`${API_URL}/package/get`);
-      setPackages(res.data);
-    } catch (err) {
-      toast.error('Failed to fetch packages', toastOptions);
-    } finally {
-      setLoadingFetch(false);
-    }
-  };
+        <p className={cx("text-xs font-semibold uppercase tracking-wider", featured ? "text-gold-dark" : "text-gold-light")}>Includes</p>
+        <Stagger as="ul" gap={0.07} className="mt-3 space-y-2.5">
+          {(combo.services || []).map((s) => (
+            <StaggerItem as="li" key={s} className="flex items-start gap-2.5 text-sm">
+              <span className={cx("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full", featured ? "bg-gold text-white" : "bg-gold/20 text-gold-light")}>
+                <Check className="h-3 w-3" aria-hidden />
+              </span>
+              <span className={featured ? "text-ink-soft" : "text-cream/85"}>{s}</span>
+            </StaggerItem>
+          ))}
+        </Stagger>
 
-  const fetchCoupons = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/coupon/get-all`);
-      setCoupons(res.data);
-    } catch (error) {
-      console.error('Error fetching coupons:', error);
-    }
-  };
+        {combo.features?.length > 0 && (
+          <ul className="mt-5 flex flex-wrap gap-2">
+            {combo.features.map((f) => (
+              <li key={f} className={cx("rounded-full px-3 py-1 text-xs", featured ? "bg-sand text-ink-soft" : "bg-white/10 text-cream/75")}>
+                {f}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-auto pt-8">
+          <Button variant={featured ? "primary" : "gold"} size="lg" className="w-full" onClick={() => onBuy(combo)}>
+            Get {combo.title}
+          </Button>
+        </div>
+      </div>
+    </article>
+  );
+
+  if (featured) {
+    return (
+      <div className="h-full animate-float lg:-my-6">
+        <div className="glow-border h-full rounded-card p-[1.5px]">
+          <TiltCard max={5} className="h-full rounded-card">
+            {card}
+          </TiltCard>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <TiltCard max={6} className="h-full rounded-card">
+      {card}
+    </TiltCard>
+  );
+}
+
+/* ------------------------------------------------------------------ Purchase modal */
+
+function PurchaseModal({ combo, options, onClose }) {
+  const navigate = useNavigate();
+  const [method, setMethod] = useState(options.defaultMethod);
+  const [coupon, setCoupon] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(null);
 
   useEffect(() => {
-    fetchPackages();
-    fetchCoupons();
-  }, []);
+    if (!method && options.defaultMethod) setMethod(options.defaultMethod);
+  }, [options.defaultMethod, method]);
 
-  // Coupon Validation
-  const validateCoupon = async (code) => {
-    if (!selectedPackage) return;
-    const token = localStorage.getItem('userToken');
+  const total = coupon ? coupon.finalAmount : combo.price;
 
+  const confirm = async () => {
+    setSubmitting(true);
     try {
-      const res = await axios.post(
-        `${API_URL}/coupon/apply`,
-        { code, orderValue: selectedPackage.price },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (res.status === 200) {
-        setCouponData({
-          code: res.data.code,
-          discount: res.data.discount,
-          finalAmount: res.data.finalAmount,
-        });
-        setCouponError('');
-        toast.success('Coupon applied successfully!', toastOptions);
-      }
-    } catch (error) {
-      setCouponError(error.response?.data?.error || 'Invalid coupon!');
-      setCouponData({ code: '', discount: 0, finalAmount: 0 });
-    }
-  };
-
-  // Order Submit (COD or Online)
-  const handleOrderSubmit = async () => {
-    if (!selectedPackage) return;
-
-    const token = localStorage.getItem('userToken');
-    const payload = {
-      packageId: selectedPackage._id,
-      paymentMethod,
-      finalAmount: couponData.finalAmount > 0 ? couponData.finalAmount : selectedPackage.price,
-    };
-
-    if (couponData.code) {
-      payload.couponCode = couponData.code;
-      payload.discount = couponData.discount;
-    }
-
-    try {
-      setLoadingPackageId(selectedPackage._id);
-
-      const response = await axios.post(`${API_URL}/order/place`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
+      const { data } = await api.post("/order/place", {
+        packageId: combo._id,
+        paymentMethod: method,
+        ...(coupon ? { couponCode: coupon.code } : {}),
       });
-
-      toast.success(response.data.message || 'Order placed successfully', toastOptions);
-      resetSelection();
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Something went wrong!', toastOptions);
+      if (data.payment) {
+        try {
+          await payOnline(data.payment);
+        } catch (err) {
+          if (err?.cancelled) {
+            toast.info("Payment cancelled — no charge was made");
+            return;
+          }
+          throw err;
+        }
+      }
+      setDone({ paidOnline: Boolean(data.payment), expiry: data.order?.expiryDate });
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't complete your purchase."));
     } finally {
-      setLoadingPackageId(null);
+      setSubmitting(false);
     }
-  };
-
-  const resetSelection = () => {
-    setShowFinalConfirm(false);
-    setShowConfirmPopup(false);
-    setShowPaymentDashboard(false);
-    setSelectedPackage(null);
-    setCouponData({ code: '', discount: 0, finalAmount: 0 });
-    setCouponError('');
-    setPaymentMethod('cod');
   };
 
   return (
-    <div className="min-h-screen">
-      {/* Hero */}
-      <section className="relative h-[60vh] flex items-center justify-center overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage:
-              "url(https://images.pexels.com/photos/3065209/pexels-photo-3065209.jpeg?auto=compress&cs=tinysrgb&w=1920)",
-          }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/60"></div>
-        </div>
-        <div className="relative z-10 text-center text-white px-4">
-          <h1 className="text-5xl md:text-6xl font-light tracking-widest mb-4">
-            OUR SERVICES
-          </h1>
-          <p className="text-lg md:text-xl font-light max-w-2xl mx-auto">
-            Experience elegance and care — where every detail matters.
-          </p>
-        </div>
-      </section>
-
-      {/* Packages */}
-      <section id="combos" className="py-10">
-        <div className="container mx-auto px-4">
-          <div className="grid lg:grid-cols-3 gap-8 mb-6">
-            {packages.slice(0, visibleCount).map((pkg) => (
-              <div
-                key={pkg._id}
-                className="group bg-white rounded-sm shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 overflow-hidden"
-              >
-                <div className="relative h-48 overflow-hidden">
-                  <img
-                    src={`${API_URL}/uploads/${pkg.image}`}
-                    alt={pkg.title}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
-                </div>
-
-                <div className="p-6">
-                  <h3 className="text-xl font-bold text-gray-800 mb-1 font-serif">{pkg.title}</h3>
-                  <p className="text-gray-600 text-sm font-serif mb-4">{pkg.subtitle}</p>
-
-                  <div className="text-3xl font-bold text-amber-600 mb-6">
-                    ₹{pkg.price.toLocaleString('en-IN')}
-                  </div>
-
-                  <div className="space-y-2 mb-6 font-serif">
-                    {pkg.services.map((s, i) => (
-                      <div key={i} className="flex items-center space-x-2">
-                        <Check className="text-green-500" size={16} />
-                        <span className="text-sm text-gray-700">{s}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      const token = localStorage.getItem('userToken');
-                      if (!token) {
-                        window.location.href = '/login';
-                        return;
-                      }
-                      setSelectedPackage(pkg);
-                      setShowConfirmPopup(true);
-                    }}
-                    disabled={loadingPackageId === pkg._id}
-                    className="cursor-pointer w-full bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-sm 
-                    font-semibold transition-all transform hover:scale-105 flex items-center justify-center space-x-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                  >
-                    {loadingPackageId === pkg._id ? (
-                      <Loader2 className="animate-spin" size={20} />
-                    ) : (
-                      <>
-                        <ShoppingCart size={20} />
-                        <span>Order Combo</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {visibleCount < packages.length && (
-            <div className="text-center mt-6">
-              <ChevronDownCircle
-                className="h-10 w-10 text-amber-900 cursor-pointer"
-                onClick={() => setVisibleCount((prev) => prev + 3)}
-              />
+    <Modal
+      open
+      onClose={onClose}
+      dismissible={!submitting}
+      size="lg"
+      title={done ? "Combo activated" : combo.title}
+      description={done ? undefined : `${combo.services?.length || 0} services · valid for ${combo.validityDays || 30} days`}
+      footer={
+        done ? null : (
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs text-muted">Total</p>
+              <p className="font-display text-2xl font-semibold text-ink">{formatCurrency(total)}</p>
             </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button variant="gold" onClick={confirm} loading={submitting} disabled={!method}>
+                {method === "online" ? `Pay ${formatCurrency(total)}` : "Confirm purchase"}
+              </Button>
+            </div>
+          </div>
+        )
+      }
+    >
+      {done ? (
+        <SuccessPanel
+          title="Enjoy your combo"
+          lines={[
+            ["Combo", combo.title],
+            ["Services", String(combo.services?.length || 0)],
+            ["Payment", done.paidOnline ? "Paid online" : "Pay at salon"],
+            ["Total", formatCurrency(total)],
+          ]}
+          note="Book each included service at the studio whenever it suits you. Track usage from your profile."
+          secondary={
+            <Button variant="outline" onClick={onClose}>
+              Done
+            </Button>
+          }
+          primary={<Button onClick={() => navigate("/profile", { state: { tab: "combos" } })}>View my combos</Button>}
+        />
+      ) : (
+        <div className="space-y-7">
+          <div className="relative overflow-hidden rounded-2xl bg-ink p-5 text-cream">
+            <AmbientBlobs className="opacity-70" />
+            <ul className="relative grid gap-2 sm:grid-cols-2">
+              {(combo.services || []).map((s) => (
+                <li key={s} className="flex items-center gap-2 text-sm text-cream/90">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gold/25 text-gold-light">
+                    <Check className="h-3 w-3" aria-hidden />
+                  </span>
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <section>
+            <h3 className="mb-3 text-sm font-semibold text-ink">Payment method</h3>
+            <PaymentMethodPicker methods={options.methods} value={method} onChange={setMethod} />
+          </section>
+          <section>
+            <h3 className="mb-3 text-sm font-semibold text-ink">Coupon</h3>
+            <CouponPicker coupons={options.coupons} target={{ packageId: combo._id }} applied={coupon} onApplied={setCoupon} />
+          </section>
+          <div className="rounded-2xl border border-line p-5">
+            <PriceSummary price={combo.price} discount={coupon?.discount || 0} total={total} couponCode={coupon?.code} formatCurrency={formatCurrency} />
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ Page */
+
+const PERKS = [
+  { icon: Wallet, title: "Better value", text: "Save compared to booking each service separately." },
+  { icon: CalendarClock, title: "Use at your pace", text: "Redeem services any time before your combo expires." },
+  { icon: ShieldCheck, title: "Same expert care", text: "Every service is delivered by our senior stylists." },
+];
+
+export default function Combos() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated } = useAuth();
+  const options = useCheckoutOptions();
+  const [combos, setCombos] = useState([]);
+  const [servicePrices, setServicePrices] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    api
+      .get("/package/get")
+      .then(({ data }) => setCombos(data || []))
+      .catch((err) => toast.error(getErrorMessage(err, "Couldn't load combos.")))
+      .finally(() => setLoading(false));
+    // Individual prices power the "worth / you save" comparison (optional).
+    api
+      .get("/service/get")
+      .then(({ data }) => setServicePrices(Object.fromEntries((data || []).map((s) => [s.title, s.price]))))
+      .catch(() => {});
+  }, []);
+
+  // Sum of the included services' individual prices (0 if any service is unknown).
+  const worthOf = useMemo(
+    () => (combo) => {
+      const prices = (combo.services || []).map((n) => servicePrices[n]);
+      return prices.length && prices.every((p) => typeof p === "number") ? prices.reduce((a, b) => a + b, 0) : 0;
+    },
+    [servicePrices]
+  );
+
+  const buy = (combo) => {
+    if (!isAuthenticated) {
+      toast.info("Please sign in to purchase a combo");
+      navigate("/login", { state: { from: location.pathname } });
+      return;
+    }
+    setSelected(combo);
+  };
+
+  // Highlight the middle card of the visible row (by price order from the API).
+  const featuredIndex = combos.length >= 3 ? 1 : -1;
+
+  const stats = combos.length
+    ? [
+        { value: combos.length, label: "Curated combos" },
+        { value: `${Math.max(...combos.map((c) => c.services?.length || 0))}`, label: "Max services" },
+        { value: `${Math.max(...combos.map((c) => c.validityDays || 30))} days`, label: "Longest validity" },
+        { value: `From ${formatCurrency(Math.min(...combos.map((c) => c.price)))}`, label: "Pricing" },
+      ]
+    : [];
+
+  const comparisons = combos.map((c) => ({ combo: c, worth: worthOf(c) })).filter((x) => x.worth > x.combo.price);
+
+  return (
+    <div>
+      <CinematicHeader
+        eyebrow="Premium combos"
+        title="More care, *better* value"
+        description="Curated bundles of our most-loved services. Buy once, then enjoy each treatment whenever you like."
+        image={HERO}
+        stats={stats}
+      />
+
+      <section className="relative overflow-hidden bg-ink py-24">
+        <AmbientBlobs className="opacity-60" />
+        <Grain />
+        <div className="container-page relative">
+          {loading ? (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <CardSkeleton key={i} />
+              ))}
+            </div>
+          ) : combos.length === 0 ? (
+            <EmptyState
+              icon={Package}
+              title="New combos coming soon"
+              description="We're putting together fresh bundles. Meanwhile, explore our individual services."
+              action={<Button to="/services">Browse services</Button>}
+            />
+          ) : (
+            <Stagger gap={0.15} className="grid items-stretch gap-8 md:grid-cols-2 lg:grid-cols-3 lg:py-6">
+              {combos.map((combo, i) => (
+                <StaggerItem key={combo._id} className="h-full">
+                  <ComboCard combo={combo} featured={i === featuredIndex} worth={worthOf(combo)} onBuy={buy} />
+                </StaggerItem>
+              ))}
+            </Stagger>
           )}
         </div>
       </section>
 
-      {/* Confirm Popup */}
-      {showConfirmPopup && selectedPackage && (
-        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Order: {selectedPackage.title}</h3>
-              <button onClick={() => setShowConfirmPopup(false)} className="text-gray-500 hover:text-gray-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Coupon Section */}
-            <div className="mb-4">
-              <h4 className="font-semibold mb-2">Available Coupons</h4>
-              {coupons.length > 0 ? (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {coupons.map((c) => (
-                    <button
-                      key={c._id}
-                      onClick={() => validateCoupon(c.couponCode)}
-                      disabled={!!couponData.code}
-                      className={`px-3 py-1 text-sm rounded-full ${
-                        couponData.code === c.couponCode
-                          ? 'bg-green-200 cursor-not-allowed'
-                          : 'bg-amber-100 hover:bg-amber-200'
-                      }`}
-                    >
-                      {c.couponCode}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-sm">No coupons available</p>
-              )}
-
-              {couponData.discount > 0 && (
-                <div className="bg-green-100 p-3 rounded-lg mt-2 text-sm">
-                  <p>Discount: ₹{couponData.discount}</p>
-                  <p className="font-semibold">Final Amount: ₹{couponData.finalAmount}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Payment Method Dropdown */}
-            <div className="mb-4">
-              <label className="block mb-1 font-medium text-gray-700">Select Payment Method</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500"
-              >
-                <option value="cod">Cash on Delivery</option>
-                <option value="online">Online Payment</option>
-              </select>
-            </div>
-
-            <div className="flex gap-4 justify-end">
-              <button
-                onClick={() => setShowConfirmPopup(false)}
-                className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (paymentMethod === 'online') {
-                    setShowPaymentDashboard(true);
-                    setShowConfirmPopup(false);
-                  } else {
-                    setShowFinalConfirm(true);
-                  }
-                }}
-                className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
-              >
-                Proceed
-              </button>
-            </div>
-          </div>
-        </div>
+      {comparisons.length > 0 && (
+        <section className="container-page py-20">
+          <Reveal>
+            <p className="eyebrow">Do the maths</p>
+            <h2 className="mt-3 font-display text-4xl md:text-5xl">
+              Combo vs <span className="text-gold-gradient italic">booking separately</span>
+            </h2>
+          </Reveal>
+          <Stagger className="mt-10 space-y-4">
+            {comparisons.map(({ combo, worth }) => {
+              const saving = worth - combo.price;
+              const pct = Math.round((combo.price / worth) * 100);
+              return (
+                <StaggerItem key={combo._id}>
+                  <Spotlight className="rounded-2xl border border-line/70 bg-white p-5 shadow-soft md:p-6">
+                    <div className="relative grid items-center gap-4 md:grid-cols-[1.2fr_2fr_auto]">
+                      <div>
+                        <p className="font-display text-2xl text-ink">{combo.title}</p>
+                        <p className="text-xs text-muted">{combo.services?.length} services</p>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs text-muted">
+                          <span>Combo {formatCurrency(combo.price)}</span>
+                          <span>Separately {formatCurrency(worth)}</span>
+                        </div>
+                        <div className="mt-2 h-3 overflow-hidden rounded-full bg-sand">
+                          <Reveal x={-40} y={0} className="h-full">
+                            <div className="h-full rounded-full bg-gradient-to-r from-gold-dark via-gold to-gold-light" style={{ width: `${pct}%` }} />
+                          </Reveal>
+                        </div>
+                      </div>
+                      <Badge tone="success" className="justify-self-start text-sm md:justify-self-end">
+                        You save <CountUp to={saving} prefix="₹" duration={1.4} />
+                      </Badge>
+                    </div>
+                  </Spotlight>
+                </StaggerItem>
+              );
+            })}
+          </Stagger>
+        </section>
       )}
 
-      {/* Online Payment Popup */}
-      {showPaymentDashboard && (
-        <div className="fixed inset-0 flex items-center justify-center backdrop-blur-sm z-[80]">
-          <div className="bg-white w-full max-w-sm rounded-xl shadow-xl p-6 text-center">
-            <h2 className="text-xl font-semibold mb-4">Online Payment</h2>
-            <p className="text-gray-600 mb-6">Enter your card details (Dummy Payment)</p>
-
-            <div className="space-y-3 mb-4 text-left">
-              <input type="text" placeholder="Card Number" className="w-full border px-3 py-2 rounded" />
-              <div className="flex gap-2">
-                <input type="text" placeholder="MM/YY" className="w-1/2 border px-3 py-2 rounded" />
-                <input type="text" placeholder="CVV" className="w-1/2 border px-3 py-2 rounded" />
+      <section className="border-t border-line/70 bg-white py-16">
+        <Stagger className="container-page grid gap-8 md:grid-cols-3">
+          {PERKS.map((p) => (
+            <StaggerItem key={p.title} className="flex gap-4">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-ink text-gold-light shadow-soft">
+                <p.icon className="h-5 w-5" aria-hidden />
+              </span>
+              <div>
+                <h3 className="font-display text-xl font-medium">{p.title}</h3>
+                <p className="mt-1 text-sm text-muted">{p.text}</p>
               </div>
-            </div>
-
-            <div className="flex justify-center gap-3">
-              <button
-                onClick={() => setShowPaymentDashboard(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  handleOrderSubmit();
-                  setShowPaymentDashboard(false);
-                }}
-                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600"
-              >
-                Pay ₹
-                {couponData.finalAmount > 0 ? couponData.finalAmount : selectedPackage?.price}
-              </button>
-            </div>
-          </div>
+            </StaggerItem>
+          ))}
+        </Stagger>
+        <div className="container-page mt-12 flex justify-center">
+          <Badge tone="gold">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden /> Coupons apply to combos too — check the Offers page
+          </Badge>
         </div>
-      )}
+      </section>
 
-      {/* Final Confirm (COD) */}
-      {showFinalConfirm && (
-        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center">
-            <h3 className="text-lg font-semibold mb-4">
-              Confirm your booking for {selectedPackage?.title}?
-            </h3>
-            <div className="flex gap-4 justify-center">
-              <button
-                onClick={() => setShowFinalConfirm(false)}
-                className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleOrderSubmit}
-                disabled={loadingPackageId === selectedPackage?._id}
-                className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600"
-              >
-                {loadingPackageId === selectedPackage?._id ? 'Processing...' : 'Confirm'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {loadingFetch && <Loader />}
-      <ToastContainer />
+      {selected && <PurchaseModal key={selected._id} combo={selected} options={options} onClose={() => setSelected(null)} />}
     </div>
   );
 }
-
-export default Combos;

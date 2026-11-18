@@ -1,31 +1,81 @@
 const cron = require("node-cron");
 const Order = require("./models/PackageOrder");
-const sendEmail = require("./utils/sendEmail");
-const User = require("./models/User");
-const Package = require("./models/Package");
+const Booking = require("./models/ServiceBooking");
+const Coupon = require("./models/Coupon");
+const config = require("./config");
+const emails = require("./templates/emails");
+const { sendEmail } = require("./utils/sendEmail");
 
-// Runs every day at midnight
-cron.schedule("0 0 * * *", async () => {
+const STALE_PAYMENT_MINUTES = 30;
+
+// Combo orders: remind 7 days before expiry (once), then mark expired.
+const runExpiryJob = async () => {
   const now = new Date();
-  const oneWeekLater = new Date(now);
-  oneWeekLater.setDate(now.getDate() + 7);
+  const inAWeek = new Date(now.getTime() + 7 * 86400000);
 
-  // Orders expiring in 7 days
-  const expiringSoon = await Order.find({ expiryDate: { $lte: oneWeekLater, $gt: now }, status: "active" })
-    .populate("user package");
+  const expiringSoon = await Order.find({
+    status: { $nin: ["expired", "cancelled"] },
+    paymentStatus: { $ne: "failed" },
+    expiryReminderSent: { $ne: true },
+    expiryDate: { $gt: now, $lte: inAWeek },
+  }).populate("user package");
 
-  for (let order of expiringSoon) {
-    const user = await User.findById(order.user);
-    await sendEmail(user.email, "Package expiring soon", `Your package ${order.package.title} expires in 7 days.`);
+  for (const order of expiringSoon) {
+    if (order.user?.email && order.package) {
+      const { subject, html } = emails.packageExpiring({ name: order.user.username, pkg: order.package, order });
+      await sendEmail(order.user.email, subject, html);
+    }
+    order.expiryReminderSent = true;
+    await order.save();
   }
 
-  // Orders expiring today
-  const expiringToday = await Order.find({ expiryDate: { $lte: now }, status: "active" }).populate("user package");
+  const expired = await Order.find({
+    status: { $nin: ["expired", "cancelled"] },
+    paymentStatus: { $ne: "failed" },
+    expiryDate: { $lte: now },
+  }).populate("user package");
 
-  for (let order of expiringToday) {
-    const user = await User.findById(order.user);
-    await sendEmail(user.email, "Package expired", `Your package ${order.package.title} expired today.`);
+  for (const order of expired) {
+    if (order.user?.email && order.package) {
+      const { subject, html } = emails.packageExpired({ name: order.user.username, pkg: order.package });
+      await sendEmail(order.user.email, subject, html);
+    }
     order.status = "expired";
     await order.save();
   }
-});
+
+  const coupons = await Coupon.updateMany({ status: "ACTIVE", validityEnd: { $lt: now } }, { status: "EXPIRED" });
+
+  console.log(
+    `[jobs] expiry: ${expiringSoon.length} reminders, ${expired.length} expired orders, ${coupons.modifiedCount} expired coupons`
+  );
+};
+
+// Online checkouts the customer abandoned: release the slot / order after 30 minutes.
+const runStalePaymentJob = async () => {
+  const cutoff = new Date(Date.now() - STALE_PAYMENT_MINUTES * 60000);
+  const stale = { paymentMethod: "online", paymentStatus: "pending", createdAt: { $lt: cutoff } };
+  const [b, o] = await Promise.all([
+    Booking.updateMany(stale, { paymentStatus: "failed", status: "cancelled", cancelledBy: "system" }),
+    Order.updateMany(stale, { paymentStatus: "failed", status: "cancelled" }),
+  ]);
+  if (b.modifiedCount || o.modifiedCount) {
+    console.log(`[jobs] released ${b.modifiedCount} unpaid bookings and ${o.modifiedCount} unpaid orders`);
+  }
+};
+
+const safe = (name, fn) => async () => {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`[jobs] ${name} failed:`, err);
+  }
+};
+
+const startJobs = () => {
+  cron.schedule("0 9 * * *", safe("expiry", runExpiryJob), { timezone: config.timezone });
+  cron.schedule("*/10 * * * *", safe("stale-payments", runStalePaymentJob), { timezone: config.timezone });
+  console.log("[jobs] scheduled: combo expiry (daily 09:00), unpaid checkout cleanup (every 10 min)");
+};
+
+module.exports = { startJobs, runExpiryJob, runStalePaymentJob };

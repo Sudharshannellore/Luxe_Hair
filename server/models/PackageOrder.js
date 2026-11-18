@@ -1,30 +1,25 @@
 const mongoose = require("mongoose");
-const moment = require("moment");
+const reviewSchema = require("./review");
 
 const orderSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     package: { type: mongoose.Schema.Types.ObjectId, ref: "Package", required: true },
     orderDate: { type: Date, default: Date.now },
-    couponCode: {type:String},
-    discount: {type:Number},
-    finalPrice:{type:Number},
-    expiryDate: {
-      type: Date,
-      default: () => moment().add(30, "days").toDate(),
-    },
+    expiryDate: { type: Date, default: () => new Date(Date.now() + 30 * 86400000) },
+    status: { type: String, enum: ["active", "expired", "cancelled"], default: "active" },
+    expiryReminderSent: { type: Boolean, default: false },
 
-    // payment info
-    paymentMethod: {
-      type: String,
-      enum: ["cod", "online"], // cash on delivery or online
-      required: true
-    },
-    paymentStatus: {
-      type: String,
-      enum: ["pending", "paid"],
-      default: "pending"
-    },
+    price: { type: Number },
+    couponCode: { type: String },
+    discount: { type: Number, default: 0 },
+    finalPrice: { type: Number },
+
+    paymentMethod: { type: String, enum: ["cod", "online"], required: true },
+    paymentStatus: { type: String, enum: ["pending", "paid", "failed", "refunded"], default: "pending" },
+    paymentRef: { type: String }, // demo checkout reference
+    transactionId: { type: String }, // set when the demo payment is confirmed
+    paymentInstrument: { type: String }, // e.g. "Visa •••• 4242" or "UPI ann@okbank"
 
     servicesUsed: {
       type: [
@@ -32,41 +27,27 @@ const orderSchema = new mongoose.Schema(
           serviceName: { type: String, required: true },
           used: { type: Boolean, default: false },
           usedAt: { type: Date, default: null },
-          assignedStaff: { type: mongoose.Schema.Types.ObjectId, ref: "Staff", default: null }
-        }
+          assignedStaff: { type: mongoose.Schema.Types.ObjectId, ref: "Staff", default: null },
+        },
       ],
-      default: []
+      default: [],
     },
-    reviews: {
-      type: [
-        {
-          user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-          comment: { type: String, required: true },
-          rating: { type: Number, min: 1, max: 5, required: true }
-        }
-      ],
-      default: []
-    }
+    reviews: { type: [reviewSchema], default: [] },
   },
   { timestamps: true }
 );
 
-// Auto-populate servicesUsed when order is new
-orderSchema.pre("save", async function (next) {
-  if (this.isNew) {
-    const Package = mongoose.model("Package");
-    const pkg = await Package.findById(this.package);
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ status: 1, expiryDate: 1 });
+orderSchema.index({ paymentRef: 1 }, { sparse: true });
 
-    if (pkg && pkg.services.length > 0) {
-      this.servicesUsed = pkg.services.map(svc => ({
-        serviceName: svc,
-        used: false,
-        usedAt: null,
-        assignedStaff: null
-      }));
-    }
+// Copy the package's service list into servicesUsed when an order is created.
+orderSchema.pre("save", async function seedServices() {
+  if (!this.isNew || this.servicesUsed.length) return;
+  const pkg = await mongoose.model("Package").findById(this.package).select("services").lean();
+  if (pkg?.services?.length) {
+    this.servicesUsed = pkg.services.map((serviceName) => ({ serviceName }));
   }
-  next();
 });
 
 module.exports = mongoose.model("PackageOrder", orderSchema);

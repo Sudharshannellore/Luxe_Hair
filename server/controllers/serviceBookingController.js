@@ -1,321 +1,202 @@
-const mongoose = require("mongoose");
 const Booking = require("../models/ServiceBooking");
 const Service = require("../models/Service");
 const User = require("../models/User");
-const sendEmail = require("../utils/sendEmail");
 const Staff = require("../models/Staff");
-const crypto = require("crypto");
+const Settings = require("../models/PaymentSettings");
+const { createDemoPayment } = require("../utils/demoPayment");
+const emails = require("../templates/emails");
+const { queueEmail } = require("../utils/sendEmail");
+const { quote } = require("../utils/pricing");
+const { httpError } = require("../utils/httpError");
+const { getAvailability } = require("../utils/slots");
+const { DATE_KEY, dateKeyToDate, dateToKey, todayKey, addDays } = require("../utils/dates");
 
-// ================== CREATE BOOKING ==================
+const MAX_DAYS_AHEAD = 90;
+
+const ensurePaymentMethodAllowed = async (method) => {
+  const settings = await Settings.current();
+  if (method === "cod" && !settings.payment.cod) throw httpError(400, "Pay at salon is currently unavailable.");
+  if (method === "online" && !settings.payment.online) {
+    throw httpError(400, "Online payment is currently unavailable.");
+  }
+};
+
+const ensureBookableDate = (dateKey) => {
+  const today = todayKey();
+  const max = dateToKey(addDays(dateKeyToDate(today), MAX_DAYS_AHEAD));
+  if (dateKey < today) throw httpError(400, "Please choose today or a future date.");
+  if (dateKey > max) throw httpError(400, `Bookings open up to ${MAX_DAYS_AHEAD} days ahead.`);
+};
+
+const ADMIN_POPULATE = [
+  { path: "service", select: "title price image category duration" },
+  { path: "user", select: "username email phone image" },
+  { path: "assignedStaff", select: "name email image status" },
+];
+
+const notify = (booking, template) => {
+  const user = booking.user;
+  const service = booking.service;
+  if (!user?.email || !service) return;
+  const { subject, html } = template({ name: user.username, booking, service });
+  queueEmail(user.email, subject, html);
+};
+
+// ================== PUBLIC / CUSTOMER ==================
+
+// GET /booking/slots?date=YYYY-MM-DD
+exports.getSlots = async (req, res) => {
+  const { date } = req.query;
+  if (!DATE_KEY.test(date || "")) throw httpError(400, "date must be YYYY-MM-DD");
+  ensureBookableDate(date);
+  res.json({ date, slots: await getAvailability(date) });
+};
+
 exports.createBooking = async (req, res) => {
-  try {
-    const { serviceId, paymentMethod, date, couponCode, discount, finalAmount } = req.body;
-    const userId = req.userId;
+  const { serviceId, date, timeSlot, paymentMethod, couponCode } = req.body;
 
-    if (!serviceId || !paymentMethod) {
-      return res
-        .status(400)
-        .json({ message: "serviceId and paymentMethod are required" });
-    }
+  ensureBookableDate(date);
+  await ensurePaymentMethodAllowed(paymentMethod);
 
-    const user = await User.findById(userId).select("email name");
-    if (!user) return res.status(404).json({ message: "User not found" });
+  const [user, service] = await Promise.all([User.findById(req.userId), Service.findById(serviceId)]);
+  if (!user) throw httpError(404, "User not found");
+  if (!service) throw httpError(404, "Service not found");
 
-    const service = await Service.findById(serviceId);
-    if (!service) return res.status(404).json({ message: "Service not found" });
+  const slot = (await getAvailability(date)).find((s) => s.time === timeSlot);
+  if (!slot?.available) throw httpError(409, "That time slot is no longer available. Please pick another.");
 
-    // Create booking (no online payments now)
-    const booking = await Booking.create({
-      user: userId,
-      service: serviceId,
-      date,
-      paymentMethod,
-      paymentStatus: paymentMethod === 'cod'? 'pending' : 'paid',
-      price: service.price,
-      couponCode: couponCode,
-      discount: discount,
-      finalPrice: finalAmount,
+  // Price is always computed on the server.
+  const price = await quote({ price: service.price, couponCode, userId: user._id });
+
+  const booking = await Booking.create({
+    user: user._id,
+    service: service._id,
+    date: dateKeyToDate(date),
+    timeSlot,
+    paymentMethod,
+    paymentStatus: "pending",
+    ...price,
+  });
+  booking.user = user;
+  booking.service = service;
+
+  if (paymentMethod === "online" && booking.finalPrice > 0) {
+    const payment = createDemoPayment({
+      type: "booking",
+      id: booking._id,
+      amount: booking.finalPrice,
+      description: service.title,
+      prefill: { name: user.username, email: user.email, contact: user.phone || "" },
     });
-
-    // Send confirmation email
-    try {
-    const couponLine = couponCode
-      ? `<p><span class="highlight">Coupon Code:</span> ${couponCode}</p>`
-      : "";
-    const discountLine = discount
-                      ? `<p><span class="highlight">Discount:</span> %${discount}</p>`  
-                      : "";    
-    const totalLine = finalAmount 
-                      ? `<p><span class="highlight">Total Paid:</span> ₹${finalAmount}</p>`  
-                      : "";       
-      await sendEmail(
-        user.email,
-        "Booking Confirmation",
-        `   
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8" />
-      <style>
-        body {font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;padding:0;color:#333;}
-        .mail {max-width:600px;margin:30px auto;background:#fff;border-radius:12px;box-shadow:0 3px 12px rgba(0,0,0,.08);overflow:hidden;}
-        .head {background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;text-align:center;padding:25px;}
-        .head h2 {margin:0;font-size:22px;}
-        .body {padding:25px;}
-        .info {background:#f9fafc;border-radius:8px;padding:15px 20px;margin:20px 0;}
-        .info p {margin:6px 0;font-size:15px;}
-        .highlight {color:#16a34a;font-weight:600;}
-        .btn {display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:10px 22px;border-radius:6px;margin-top:10px;}
-        .btn:hover {background:#15803d;}
-        .foot {text-align:center;font-size:13px;color:#777;border-top:1px solid #eee;padding:15px;}
-      </style>
-    </head>
-    <body>
-      <div class="mail">
-        <div class="head">
-          <h2>Booking Confirmed 🎉</h2>
-          <p style="margin:5px 0 0;font-size:14px;">Thanks for choosing us!</p>
-        </div>
-        <div class="body">
-          <p>Hello <strong>${user.name || "User"}</strong>,</p>
-          <p>Your booking has been successfully confirmed.</p>
-
-          <div class="info">
-            <p><span class="highlight">Service:</span> ${service.title}</p>
-            <p><span class="highlight">Payment:</span> ${paymentMethod}</p>
-            <p><span class="highlight">Price:</span> ₹${service.price}</p>
-             ${couponLine}
-             ${discountLine}
-             ${totalLine}
-            <p><span class="highlight">Status:</span> ${booking.paymentStatus}</p>
-          </div>
-          <p style="margin-top:25px;">Need help? Contact us anytime.</p>
-        </div>
-        <div class="foot">
-          © 2025 luxe hair • 
-        </div>
-      </div>
-    </body>
-    </html>`
-      );
-    } catch (emailErr) {
-      console.error("Email error:", emailErr.message);
-    }
-
-    res.status(201).json({ message: "Booking created successfully", booking });
-  } catch (err) {
-    console.error("Error creating booking:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// ================== ASSIGN STAFF ==================
-exports.assignStaff = async (req, res) => {
-  try {
-    const { bookingId, staffId } = req.body;
-
-    const booking = await Booking.findById(bookingId)
-      .populate("user", "name email")
-      .populate("service");
-    if (!booking) return res.status(404).json({ message: "Booking not found" });
-
-    const staff = await Staff.findById(staffId);
-    if (!staff) return res.status(404).json({ message: "Staff not found" });
-
-    if (staff.status !== "active") {
-      return res.status(400).json({ message: "Staff not available right now" });
-    }
-
-    booking.assignedStaff = staff._id;
+    booking.paymentRef = payment.reference;
     await booking.save();
-
-    staff.status = "inactive";
-    await staff.save();
-
-    res.json({ message: "Staff assigned successfully", booking });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(201).json({ message: "Complete the payment to confirm your booking", booking, payment });
   }
+
+  if (paymentMethod === "online") {
+    // Fully discounted: nothing to charge.
+    booking.paymentStatus = "paid";
+    await booking.save();
+  }
+
+  notify(booking, emails.bookingConfirmed);
+  res.status(201).json({ message: "Booking confirmed", booking });
 };
 
-// ================== UPDATE STATUS ==================
-exports.updateStatus = async (req, res) => {
-  try {
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.id,
-      { status: req.body.status },
-      { new: true }
-    )
-      .populate("service")
-      .populate("user", "name email");
-
-    if (!booking) return res.status(404).json({ message: "Booking not found" });
-
-    if (req.body.status === "completed" && booking.assignedStaff) {
-      const staff = await Staff.findById(booking.assignedStaff);
-      if (staff) {
-        staff.status = "active";
-        await staff.save();
-      }
-    }
-
-    try {
-      await sendEmail(
-        booking.user.email,
-        "Booking Status Updated",
-        `    
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8" />
-      <style>
-        body {font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;padding:0;color:#333;}
-        .mail {max-width:600px;margin:30px auto;background:#fff;border-radius:12px;box-shadow:0 3px 12px rgba(0,0,0,.08);overflow:hidden;}
-        .head {background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;text-align:center;padding:25px;}
-        .head h2 {margin:0;font-size:22px;}
-        .body {padding:25px;}
-        .body p {font-size:16px;line-height:1.6;margin:12px 0;}
-        .btn {display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:10px 22px;border-radius:6px;margin-top:15px;}
-        .btn:hover {background:#15803d;}
-        .foot {text-align:center;font-size:13px;color:#777;border-top:1px solid #eee;padding:15px;}
-      </style>
-    </head>
-    <body>
-      <div class="mail">
-        <div class="head">
-          <h2>Booking Status Updated 📌</h2>
-          <p style="margin:5px 0 0;font-size:14px;">Stay updated on your booking</p>
-        </div>
-        <div class="body">
-          <p>Hello <strong>${booking.user.username || "User"}</strong>,</p>
-          <p>Your booking for <strong>${booking.service.title}</strong> is now <strong>${booking.status}</strong>.</p>
-        </div>
-        <div class="foot">
-          © 2025 luxe hair •
-        </div>
-      </div>
-    </body>
-    </html>`
-      );
-    } catch (e) {
-      console.error("Email error:", e.message);
-    }
-
-    res.json({ message: "Status updated", booking });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// ================== UPDATE PAYMENT ==================
-exports.updatePayment = async (req, res) => {
-  try {
-
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.id,
-      { paymentStatus: req.body.paymentStatus },
-      { new: true }
-    )
-      .populate("service")
-      .populate("user", "name email");
-
-    if (!booking) return res.status(404).json({ message: "Booking not found" });
-
-    if (req.body.paymentStatus === "paid") {
-      try {
-          const couponLine = booking.couponCode
-            ? `<p><span class="highlight">Coupon Code:</span> ${booking.couponCode}</p>`
-            : "";
-          const discountLine = booking.discount
-                            ? `<p><span class="highlight">Discount:</span> %${booking.discount}</p>`  
-                            : "";    
-          const totalLine = booking.finalPrice 
-                            ? `<p><span class="highlight">Total Paid:</span> ₹${booking.finalPrice}</p>`  
-                            : "";        
-        await sendEmail(
-          booking.user.email,
-          "Payment Invoice",
-          `           
-           <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="UTF-8" />
-              <style>
-                body {font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;margin:0;padding:0;color:#333;}
-                .mail {max-width:600px;margin:30px auto;background:#fff;border-radius:12px;box-shadow:0 3px 12px rgba(0,0,0,.08);overflow:hidden;}
-                .head {background:linear-gradient(135deg,#16a34a,#22c55e);color:#fff;text-align:center;padding:25px;}
-                .head h2 {margin:0;font-size:22px;}
-                .body {padding:25px;}
-                .info {background:#f9fafc;border-radius:8px;padding:15px 20px;margin:20px 0;}
-                .info p {margin:6px 0;font-size:15px;}
-                .highlight {color:#16a34a;font-weight:600;}
-                .btn {display:inline-block;background:#16a34a;color:#fff;text-decoration:none;padding:10px 22px;border-radius:6px;margin-top:10px;}
-                .btn:hover {background:#15803d;}
-                .foot {text-align:center;font-size:13px;color:#777;border-top:1px solid #eee;padding:15px;}
-              </style>
-            </head>
-            <body>
-              <div class="mail">
-                <div class="head">
-                  <h2>Payment Successful 💚</h2>
-                  <p style="margin:5px 0 0;font-size:14px;">Thank you for your payment!</p>
-                </div>
-                <div class="body">
-                  <p>Hello <strong>${booking.user.username || "User"}</strong>,</p>
-                  <p>We’ve received your payment successfully. Here are your invoice details:</p>
-
-                  <div class="info">
-                    <p><span class="highlight">Service:</span> ${booking.service.title}</p>
-                    <p><span class="highlight">Price:</span> ₹${booking.price}</p>
-                    ${couponLine}
-                    ${discountLine}
-                    ${totalLine}
-                    <p><span class="highlight">Status:</span> Paid ✅</p>
-                  </div>
-
-                  <p style="margin-top:25px;">We appreciate your business!</p>
-                </div>
-                <div class="foot">
-                  © 2025 luxe hair •
-                </div>
-              </div>
-            </body>
-            </html>`
-        );
-      } catch (e) {
-        console.error("Email error:", e.message);
-      }
-    }
-
-    res.json({ message: "Payment updated", booking });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// ================== GET ALL BOOKINGS ==================
-exports.getAllBookings = async (req, res) => {
-  try {
-    const bookings = await Booking.find()
-      .populate("service")
-      .populate("user", "username email")
-      .populate("assignedStaff", "name email status")
-      .sort({ updatedAt: -1 });
-    res.json(bookings);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// ================== GET USER BOOKINGS ==================
 exports.getUserBookings = async (req, res) => {
-  try {
-    const bookings = await Booking.find({ user: req.userId })
-      .populate("service")
-      .populate("assignedStaff", "name status")
-      .sort({ updatedAt: -1 });
-    res.json(bookings);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  const bookings = await Booking.find({ user: req.userId })
+    .populate("service", "title price image category duration description")
+    .populate("assignedStaff", "name image")
+    .sort({ date: -1, timeSlot: -1 })
+    .lean();
+  res.json(bookings);
+};
+
+exports.cancelMyBooking = async (req, res) => {
+  const booking = await Booking.findOne({ _id: req.params.id, user: req.userId })
+    .populate("service", "title")
+    .populate("user", "username email");
+  if (!booking) throw httpError(404, "Booking not found");
+  if (!["pending", "confirmed"].includes(booking.status)) {
+    throw httpError(400, `A ${booking.status} booking can't be cancelled.`);
   }
+  if (dateToKey(booking.date) < todayKey()) throw httpError(400, "Past bookings can't be cancelled.");
+
+  booking.status = "cancelled";
+  booking.cancelledBy = "user";
+  await booking.save();
+  notify(booking, emails.bookingStatus);
+
+  res.json({
+    message:
+      booking.paymentStatus === "paid"
+        ? "Booking cancelled. Your refund will be processed within 5–7 working days."
+        : "Booking cancelled.",
+    booking,
+  });
+};
+
+// ================== ADMIN ==================
+
+exports.getAllBookings = async (req, res) => {
+  const bookings = await Booking.find().populate(ADMIN_POPULATE).sort({ date: -1, timeSlot: 1 }).lean();
+  res.json(bookings);
+};
+
+exports.assignStaff = async (req, res) => {
+  const { bookingId, staffId } = req.body;
+  const [booking, staff] = await Promise.all([Booking.findById(bookingId), Staff.findById(staffId)]);
+  if (!booking) throw httpError(404, "Booking not found");
+  if (!staff) throw httpError(404, "Staff member not found");
+  if (staff.status !== "active") throw httpError(400, `${staff.name} is not an active staff member.`);
+  if (booking.status === "cancelled") throw httpError(400, "Can't assign staff to a cancelled booking.");
+
+  if (booking.timeSlot) {
+    const clash = await Booking.exists({
+      _id: { $ne: booking._id },
+      assignedStaff: staff._id,
+      date: booking.date,
+      timeSlot: booking.timeSlot,
+      status: { $ne: "cancelled" },
+    });
+    if (clash) throw httpError(409, `${staff.name} is already booked at ${booking.timeSlot} that day.`);
+  }
+
+  booking.assignedStaff = staff._id;
+  if (booking.status === "pending") booking.status = "confirmed";
+  await booking.save();
+  await booking.populate(ADMIN_POPULATE);
+  res.json({ message: `${staff.name} assigned`, booking });
+};
+
+exports.updateStatus = async (req, res) => {
+  const booking = await Booking.findById(req.params.id).populate(ADMIN_POPULATE);
+  if (!booking) throw httpError(404, "Booking not found");
+
+  booking.status = req.body.status;
+  booking.cancelledBy = req.body.status === "cancelled" ? "admin" : null;
+  await booking.save();
+  notify(booking, emails.bookingStatus);
+
+  res.json({ message: `Booking marked ${booking.status}`, booking });
+};
+
+exports.updatePayment = async (req, res) => {
+  const booking = await Booking.findById(req.params.id).populate(ADMIN_POPULATE);
+  if (!booking) throw httpError(404, "Booking not found");
+
+  const wasPaid = booking.paymentStatus === "paid";
+  booking.paymentStatus = req.body.paymentStatus;
+  await booking.save();
+
+  if (!wasPaid && booking.paymentStatus === "paid" && booking.user?.email) {
+    const { subject, html } = emails.paymentReceived({
+      name: booking.user.username,
+      itemTitle: booking.service?.title,
+      record: booking,
+    });
+    queueEmail(booking.user.email, subject, html);
+  }
+
+  res.json({ message: "Payment status updated", booking });
 };
