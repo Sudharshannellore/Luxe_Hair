@@ -1,33 +1,15 @@
-import axios from "axios";
+import api from "../lib/api";
 
-  const API_URL = import.meta.env.VITE_API_URL
+export const getAppointments = async () => (await api.get("/booking/all")).data;
 
+export const updateAppointmentStatus = async (id, status) => (await api.patch(`/booking/status/${id}`, { status })).data;
 
-const API_BASE = `${API_URL}/booking`;
+export const updatePaymentStatus = async (id, paymentStatus) =>
+  (await api.patch(`/booking/payment/${id}`, { paymentStatus })).data;
 
-// Get all appointments
-export const getAppointments = async () => {
-  const res = await axios.get(`${API_BASE}/all`);
-  return res.data;
-};
+export const assignStaffToBooking = async (bookingId, staffId) =>
+  (await api.post("/booking/assign-staff", { bookingId, staffId })).data;
 
-// Update appointment status
-export const updateAppointmentStatus = async (id, status) => {
-  const res = await axios.patch(`${API_BASE}/status/${id}`, { status });
-  return res.data;
-};
-
-// Update payment status
-export const updatePaymentStatus = async (id, paymentStatus) => {
-  const res = await axios.patch(`${API_BASE}/payment/${id}`, { paymentStatus });
-  return res.data;
-};
-
-//assign Staff
-export const assignStaffToBooking = async (bookingId, staffId) => {
-  const res = await axios.post(`${API_BASE}/assign-staff`, {
-    bookingId,
-    staffId,
-  });
-  return res.data;
-};
+/** Active staff, excluding anyone already booked at that date + slot when given. */
+export const getAvailableStaff = async (date, timeSlot) =>
+  (await api.get("/staff/active-staff", { params: date && timeSlot ? { date, timeSlot } : {} })).data;

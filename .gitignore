@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Environment files (commit only the .env.example templates)
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+dist-ssr/
+coverage/
+
+# User uploads (images are runtime data, not source)
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Logs / OS / editor
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

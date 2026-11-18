@@ -1,97 +1,53 @@
-const Staff = require('../models/Staff');
+const Staff = require("../models/Staff");
+const Booking = require("../models/ServiceBooking");
+const { httpError } = require("../utils/httpError");
+const { dateKeyToDate } = require("../utils/dates");
 
-// Create/Register Staff
 exports.createStaff = async (req, res) => {
-  const { name, email, phone, experience, specialization, address } = req.body;
-  try {
-    const existingStaff = await Staff.findOne({ email });
-    if (existingStaff) return res.status(400).json({ message: 'Staff already exists' });
-
-    const image = req.file ? req.file.filename : 'no-image.png';
-
-    const newStaff = new Staff({
-      name,
-      email,
-      phone,
-      experience,
-      specialization,
-      address,
-      image,
-    });
-
-    await newStaff.save();
-    res.status(201).json({ message: 'Staff created successfully', staff: newStaff });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+  if (await Staff.exists({ email: req.body.email })) throw httpError(409, "A staff member with this email already exists.");
+  const staff = await Staff.create({ ...req.body, image: req.file ? req.file.filename : "no-image.png" });
+  res.status(201).json({ message: "Staff member added", staff });
 };
 
-// Get all staff
 exports.getAllStaff = async (req, res) => {
-  try {
-    const staffList = await Staff.find().sort({ createdAt: -1 });
-    res.status(200).json(staffList);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+  res.json(await Staff.find().sort({ createdAt: -1 }).lean());
 };
 
-// Get staff by status (only name and _id)
-exports.getStaffByStatus = async (req, res) => {
-  try {
-
-    // only fetch name and _id fields
-    const staffList = await Staff.find({ status: 'active' }).select('name _id');
-
-    if (!staffList || staffList.length === 0) {
-      return res
-        .status(404)
-        .json({ message: 'No staff found with status' });
-    }
-
-    res.status(200).json(staffList);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+// Public: stylist cards for the website (no contact details).
+exports.getPublicStaff = async (req, res) => {
+  res.json(await Staff.find({ status: "active" }).select("name specialization experience image").sort({ createdAt: 1 }).lean());
 };
 
+// Active staff, optionally excluding those already booked for ?date=YYYY-MM-DD&timeSlot=HH:mm
+exports.getActiveStaff = async (req, res) => {
+  const { date, timeSlot } = req.query;
+  let busy = [];
+  if (date && timeSlot && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    busy = await Booking.distinct("assignedStaff", {
+      date: dateKeyToDate(date),
+      timeSlot,
+      status: { $ne: "cancelled" },
+      assignedStaff: { $ne: null },
+    });
+  }
+  const staff = await Staff.find({ status: "active", _id: { $nin: busy } }).select("name specialization image").lean();
+  res.json(staff);
+};
 
-// Update Staff
 exports.updateStaff = async (req, res) => {
-  try {
-    const { name, email, phone, experience, specialization, address } = req.body;
-    const staff = await Staff.findById(req.params.id);
-    if (!staff) return res.status(404).json({ message: 'Staff not found' });
-
-    if (name) staff.name = name;
-    if (email) staff.email = email;
-    if (phone) staff.phone = phone;
-    if (experience) staff.experience = experience;
-    if (specialization) staff.specialization = specialization; // single string
-    if (address) staff.address = address;
-    if (req.file) staff.image = req.file.filename;
-
-    await staff.save();
-    res.status(200).json({ message: 'Staff updated successfully', staff });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
+  const staff = await Staff.findById(req.params.id);
+  if (!staff) throw httpError(404, "Staff member not found");
+  if (req.body.email && req.body.email !== staff.email && (await Staff.exists({ email: req.body.email }))) {
+    throw httpError(409, "A staff member with this email already exists.");
   }
+  Object.assign(staff, req.body);
+  if (req.file) staff.image = req.file.filename;
+  await staff.save();
+  res.json({ message: "Staff member updated", staff });
 };
 
-// Delete staff 
 exports.deleteStaff = async (req, res) => {
-  try {
-    const deletedStaff = await Staff.findByIdAndDelete(req.params.id);
-    if (!deletedStaff) return res.status(404).json({ message: 'Staff not found' });
-
-    res.status(200).json({ message: 'Staff deleted successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
-  }
+  const staff = await Staff.findByIdAndDelete(req.params.id);
+  if (!staff) throw httpError(404, "Staff member not found");
+  res.json({ message: "Staff member removed" });
 };
-

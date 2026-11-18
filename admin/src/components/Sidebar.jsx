@@ -1,119 +1,115 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { NavLink } from "react-router-dom";
 import {
-  Home,
-  Calendar,
-  TrendingUp,
-  Scissors,
+  BookOpen,
+  CalendarDays,
+  LayoutDashboard,
+  Mail,
   Package,
-  UserCheck,
-  X,
-  Star,
-  Send,
+  Receipt,
+  Scissors,
   Settings,
-  Book,
-  LogOut
-} from 'lucide-react';
+  Star,
+  Users,
+  X,
+} from "lucide-react";
+import { cx } from "./ui";
 
-// Hide scrollbar styles
-const scrollbarHide = {
-  msOverflowStyle: 'none', // IE & Edge
-  scrollbarWidth: 'none',  // Firefox
-};
-
-const scrollbarHideWebkit = {
-  overflowY: 'auto',
-};
-
-const menuItems = [
-  { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Appointments', href: '/appointments', icon: Calendar },
-  { name: 'Services', href: '/services', icon: Scissors },
-  { name: 'Combos', href: '/combos', icon: Package },
-  { name: 'Combos Orders', href: '/orders', icon: TrendingUp },
-  { name: 'Staff', href: '/staff', icon: UserCheck },
-  { name: 'Reviews', href: '/review', icon: Star },
-  { name: 'Messages', href: '/message', icon: Send },
-  { name: 'Articles', href: '/article', icon: Book },
-  { name: 'Settings', href: '/setting', icon: Settings },
+const SECTIONS = [
+  { title: "Overview", items: [{ name: "Dashboard", href: "/", icon: LayoutDashboard }] },
+  {
+    title: "Bookings",
+    items: [
+      { name: "Appointments", href: "/appointments", icon: CalendarDays },
+      { name: "Combo orders", href: "/orders", icon: Receipt },
+    ],
+  },
+  {
+    title: "Catalogue",
+    items: [
+      { name: "Services", href: "/services", icon: Scissors },
+      { name: "Combos", href: "/combos", icon: Package },
+    ],
+  },
+  {
+    title: "People",
+    items: [
+      { name: "Staff", href: "/staff", icon: Users },
+      { name: "Reviews", href: "/review", icon: Star },
+      { name: "Messages", href: "/message", icon: Mail },
+    ],
+  },
+  {
+    title: "Content & setup",
+    items: [
+      { name: "Articles", href: "/article", icon: BookOpen },
+      { name: "Offers & payments", href: "/setting", icon: Settings },
+    ],
+  },
 ];
 
-const Sidebar = ({ isOpen, setIsOpen, onLogout }) => {
-  const location = useLocation();
-
+export default function Sidebar({ open, onClose }) {
   return (
     <>
-      {/* Mobile backdrop */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 transition-opacity lg:hidden"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
+      {open && <div className="fixed inset-0 z-40 animate-fade-in bg-ink/40 backdrop-blur-sm lg:hidden" onClick={onClose} aria-hidden />}
 
-      {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-amber-800 text-white transform transition-transform duration-300 ease-in-out shadow-xl flex flex-col
-        ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0`}
+        className={cx(
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line/70 bg-white transition-transform duration-300 lg:static lg:translate-x-0",
+          open ? "translate-x-0 shadow-lift" : "-translate-x-full"
+        )}
+        aria-label="Main navigation"
       >
-        {/* Logo / Branding */}
-        <div className="flex items-center justify-between h-20 px-6 border-b border-white/20">
-          <div className="flex items-center space-x-3 cursor-pointer mt-5">
-            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-              <Scissors className="w-5 h-5 text-white" />
+        <div className="flex h-16 items-center justify-between px-5">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-ink font-display text-lg text-gold-light">L</span>
+            <div className="leading-tight">
+              <p className="font-display text-lg font-semibold tracking-wide text-ink">Luxe Hair</p>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted">Admin</p>
             </div>
-            <span className="text-2xl text-white uppercase">Luxe Hair</span>
           </div>
-
-          {/* Close button (mobile only) */}
-          <button
-            onClick={() => setIsOpen(false)}
-            className="p-2 rounded-md text-white hover:bg-white/20 lg:hidden"
-          >
-            <X className="h-6 w-6" />
+          <button onClick={onClose} className="rounded-lg p-2 text-muted hover:bg-sand lg:hidden" aria-label="Close menu">
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Nav links */}
-        <nav
-          className="flex-1 px-4 py-6 space-y-2 overflow-y-auto"
-          style={{ ...scrollbarHide, ...scrollbarHideWebkit }}
-        >
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.href;
-
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-sm transition-all duration-300 ${
-                  isActive
-                    ? 'bg-white/20 text-white font-semibold shadow-md'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                }`}
-                onClick={() => setIsOpen(false)}
-              >
-                <Icon className={`text-xl ${isActive ? 'text-white' : 'text-white/70'}`} />
-                <span className="tracking-wide">{item.name}</span>
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+          {SECTIONS.map((section) => (
+            <div key={section.title}>
+              <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted/80">{section.title}</p>
+              <ul className="space-y-0.5">
+                {section.items.map(({ name, href, icon: Icon }) => (
+                  <li key={href}>
+                    <NavLink
+                      to={href}
+                      end={href === "/"}
+                      onClick={onClose}
+                      className={({ isActive }) =>
+                        cx(
+                          "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+                          isActive ? "bg-ink text-cream shadow-soft" : "text-ink-soft hover:bg-sand hover:text-ink"
+                        )
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <Icon className={cx("h-4 w-4", isActive ? "text-gold-light" : "text-muted group-hover:text-ink")} aria-hidden />
+                          {name}
+                        </>
+                      )}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </nav>
 
-        {/* Logout button at bottom */}
-        <div className="p-4 border-t border-white/20">
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center gap-2 cursor-pointer text-white py-2 rounded-md transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-            Logout
-          </button>
+        <div className="border-t border-line/70 p-4">
+          <p className="text-xs leading-relaxed text-muted">
+            Showcase mode — no sign-in required. Changes here are visible on the live site.
+          </p>
         </div>
       </aside>
     </>
   );
-};
-
-export default Sidebar;
+}

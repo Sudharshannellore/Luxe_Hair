@@ -1,78 +1,35 @@
-const Article = require('../models/Article');
-
+const Article = require("../models/Article");
+const { httpError } = require("../utils/httpError");
 
 exports.createArticle = async (req, res) => {
-  try {
-    const { title, context, tags, content } = req.body;
-
-    const newArticle = new Article({
-      title,
-      context,
-      tags: tags ? JSON.parse(tags) : [],
-      image: req.file ? req.file.filename : "no-image.png",
-      content
-    });
-
-    await newArticle.save();
-    res.status(201).json({ message: "Article created successfully", article: newArticle });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const article = await Article.create({
+    ...req.body,
+    tags: req.body.tags || [],
+    image: req.file ? req.file.filename : "no-image.png",
+  });
+  res.status(201).json({ message: "Article published", article });
 };
 
 exports.getArticles = async (req, res) => {
-  try {
-    const articles = await Article.find().sort({ publishDate: -1 });
-    res.status(200).json(articles);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+  res.json(await Article.find().sort({ publishDate: -1 }).lean());
 };
 
 exports.getArticleById = async (req, res) => {
-  try {
-    const article = await Article.findById(req.params.id);
-    if (!article) return res.status(404).json({ message: "Article not found" });
-    res.status(200).json(article);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const article = await Article.findById(req.params.id).lean();
+  if (!article) throw httpError(404, "Article not found");
+  res.json(article);
 };
 
 exports.updateArticle = async (req, res) => {
-  try {
-    const { title, context,   tags, content } = req.body;
-
-    const updatedData = {
-      title,
-      context,
-      tags: tags ? JSON.parse(tags) : [],
-      content
-    };
-
-    if (req.file) updatedData.image = req.file.filename;
-
-    const article = await Article.findByIdAndUpdate(req.params.id, updatedData, { new: true });
-
-    if (!article) return res.status(404).json({ message: "Article not found" });
-
-    res.status(200).json({ message: "Article updated successfully", article });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const update = { ...req.body };
+  if (req.file) update.image = req.file.filename;
+  const article = await Article.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
+  if (!article) throw httpError(404, "Article not found");
+  res.json({ message: "Article updated", article });
 };
 
 exports.deleteArticle = async (req, res) => {
-  try {
-    const article = await Article.findByIdAndDelete(req.params.id);
-    if (!article) return res.status(404).json({ message: "Article not found" });
-    res.status(200).json({ message: "Article deleted successfully" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const article = await Article.findByIdAndDelete(req.params.id);
+  if (!article) throw httpError(404, "Article not found");
+  res.json({ message: "Article deleted" });
 };

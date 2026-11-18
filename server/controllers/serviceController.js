@@ -1,75 +1,35 @@
 const Service = require("../models/Service");
+const { httpError } = require("../utils/httpError");
 
-// Create new service
 exports.createService = async (req, res) => {
-  try {
-    const { title, category, price, duration, description, benefits } = req.body;
-
-    const newService = new Service({
-      title,
-      category,
-      price,
-      duration,
-      description,
-      benefits: benefits ? JSON.parse(benefits) : [], // benefits will come as string array from form-data
-      image: req.file ? req.file.filename : "no-image.png"
-    });
-
-    await newService.save();
-    res.status(201).json({ message: "Service created successfully", service: newService });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
+  const service = await Service.create({
+    ...req.body,
+    benefits: req.body.benefits || [],
+    image: req.file ? req.file.filename : "no-image.png",
+  });
+  res.status(201).json({ message: "Service created", service });
 };
 
-// Get all services
 exports.getServices = async (req, res) => {
-  try {
-    const services = await Service.find(); // removed populate
-    res.status(200).json(services);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
+  res.json(await Service.find().sort({ createdAt: -1 }).lean());
 };
 
-// Get single service by ID
 exports.getServiceById = async (req, res) => {
-  try {
-    const service = await Service.findById(req.params.id); // removed populate
-    if (!service) return res.status(404).json({ message: "Service not found" });
-    res.status(200).json(service);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
+  const service = await Service.findById(req.params.id).lean();
+  if (!service) throw httpError(404, "Service not found");
+  res.json(service);
 };
 
-// Update service
 exports.updateService = async (req, res) => {
-  try {
-    const updateData = { ...req.body };
-    if (req.file) updateData.image = req.file.filename;
-
-    if (updateData.benefits) {
-      updateData.benefits = JSON.parse(updateData.benefits);
-    }
-
-    const updatedService = await Service.findByIdAndUpdate(req.params.id, updateData, { new: true });
-    if (!updatedService) return res.status(404).json({ message: "Service not found" });
-
-    res.status(200).json({ message: "Service updated", service: updatedService });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
+  const update = { ...req.body };
+  if (req.file) update.image = req.file.filename;
+  const service = await Service.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
+  if (!service) throw httpError(404, "Service not found");
+  res.json({ message: "Service updated", service });
 };
 
-// Delete service
 exports.deleteService = async (req, res) => {
-  try {
-    const deletedService = await Service.findByIdAndDelete(req.params.id);
-    if (!deletedService) return res.status(404).json({ message: "Service not found" });
-    res.status(200).json({ message: "Service deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
+  const service = await Service.findByIdAndDelete(req.params.id);
+  if (!service) throw httpError(404, "Service not found");
+  res.json({ message: "Service deleted" });
 };

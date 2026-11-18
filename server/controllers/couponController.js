@@ -1,134 +1,84 @@
-// controllers/couponController.js
 const Coupon = require("../models/Coupon");
-const ServiceBooking = require("../models/ServiceBooking");
-const PackageOrder = require("../models/PackageOrder");
+const Service = require("../models/Service");
+const Package = require("../models/Package");
+const { applyCoupon } = require("../utils/pricing");
+const { httpError } = require("../utils/httpError");
 
-// Create Coupon
+const PUBLIC_FIELDS =
+  "offerName description couponCode discountType discountValue maxDiscount minOrderValue eligibility usageLimit validityEnd";
+
+// ================== ADMIN ==================
+
 exports.createCoupon = async (req, res) => {
-  try {
-    const coupon = new Coupon(req.body);
-    await coupon.save();
-    res.status(201).json({ message: "Coupon created successfully", coupon });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
+  const coupon = await Coupon.create(req.body);
+  res.status(201).json({ message: "Coupon created", coupon });
 };
 
-// Get All Coupons
 exports.getCoupons = async (req, res) => {
-  try {
-    const coupons = await Coupon.find().sort({ updatedAt: -1 });
-    res.json(coupons);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  res.json(await Coupon.find().sort({ updatedAt: -1 }).lean());
 };
 
-// Get Single Coupon by ID
 exports.getCouponById = async (req, res) => {
-  try {
-    const coupon = await Coupon.findById(req.params.id);
-    if (!coupon) return res.status(404).json({ message: "Coupon not found" });
-    res.json(coupon);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  const coupon = await Coupon.findById(req.params.id).lean();
+  if (!coupon) throw httpError(404, "Coupon not found");
+  res.json(coupon);
 };
 
-// Update Coupon
 exports.updateCoupon = async (req, res) => {
-  try {
-    const coupon = await Coupon.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!coupon) return res.status(404).json({ message: "Coupon not found" });
-    res.json({ message: "Coupon updated successfully", coupon });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  const coupon = await Coupon.findById(req.params.id);
+  if (!coupon) throw httpError(404, "Coupon not found");
+  Object.assign(coupon, req.body);
+
+  if (coupon.validityEnd <= coupon.validityStart) throw httpError(400, "End date must be after start date");
+  if (coupon.discountType === "PERCENTAGE" && coupon.discountValue > 100) {
+    throw httpError(400, "Percentage discount cannot exceed 100");
   }
+  // Re-activating a coupon whose end date is still in the future.
+  if (coupon.status === "EXPIRED" && coupon.validityEnd > new Date() && req.body.status === "ACTIVE") coupon.status = "ACTIVE";
+
+  await coupon.save();
+  res.json({ message: "Coupon updated", coupon });
 };
 
-// Delete Coupon
 exports.deleteCoupon = async (req, res) => {
-  try {
-    const coupon = await Coupon.findByIdAndDelete(req.params.id);
-    if (!coupon) return res.status(404).json({ message: "Coupon not found" });
-    res.json({ message: "Coupon deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  const coupon = await Coupon.findByIdAndDelete(req.params.id);
+  if (!coupon) throw httpError(404, "Coupon not found");
+  res.json({ message: "Coupon deleted" });
 };
 
+// ================== PUBLIC / CUSTOMER ==================
+
+// Only coupons a customer could actually use right now.
+exports.getActiveCoupons = async (req, res) => {
+  const now = new Date();
+  const coupons = await Coupon.find({ status: "ACTIVE", validityStart: { $lte: now }, validityEnd: { $gte: now } })
+    .select(PUBLIC_FIELDS)
+    .sort({ validityEnd: 1 })
+    .lean();
+  res.json(coupons);
+};
+
+// Preview the discount. The final price is recomputed again when the booking/order is created.
 exports.applyCoupon = async (req, res) => {
-  const { code, orderValue } = req.body;
+  const { code, serviceId, packageId } = req.body;
+  let orderValue = req.body.orderValue;
 
-  try {
-    const userId = req.userId;
-
-    const coupon = await Coupon.findOne({ couponCode: code, status: "ACTIVE" });
-    if (!coupon) return res.status(404).json({ error: "Invalid or inactive coupon" });
-
-    const now = new Date();
-
-    // 1. Date validation
-    if (now < coupon.validityStart || now > coupon.validityEnd) {
-      return res.status(400).json({ error: "Coupon expired or not yet valid" });
-    }
-
-    // 2. Minimum order value check
-    if (orderValue < coupon.minOrderValue) {
-      return res.status(400).json({ error: `Order must be at least ₹${coupon.minOrderValue}` });
-    }
-
-    // 3. Eligibility check
-    if (coupon.eligibility === "NEW_USERS") {
-      const bookingCount = await ServiceBooking.countDocuments({ user: userId });
-      const orderCount = await PackageOrder.countDocuments({ user: userId });
-      if (bookingCount > 0 || orderCount > 0) {
-        return res.status(400).json({ error: "This coupon is valid only for new users (first order)" });
-      }
-    }
-
-    if (coupon.eligibility === "INACTIVE_USERS") {
-      const lastBooking = await ServiceBooking.findOne({ user: userId }).sort({ createdAt: -1 });
-      const lastOrder = await PackageOrder.findOne({ user: userId }).sort({ createdAt: -1 });
-
-      // Find latest activity
-      let lastActivity = null;
-      if (lastBooking && lastOrder) {
-        lastActivity = lastBooking.createdAt > lastOrder.createdAt ? lastBooking.createdAt : lastOrder.createdAt;
-      } else {
-        lastActivity = lastBooking?.createdAt || lastOrder?.createdAt;
-      }
-
-      if (lastActivity) {
-        const diffDays = Math.floor((now - new Date(lastActivity)) / (1000 * 60 * 60 * 24));
-        if (diffDays < 90) {
-          return res.status(400).json({ error: "This coupon is valid only if inactive for 90+ days" });
-        }
-      } else {
-        // User has no orders at all → treat as new user (not inactive)
-        return res.status(400).json({ error: "Not eligible: no purchase history (use Welcome Offer instead)" });
-      }
-    }
-
-    // 4. Discount calculation
-    let discount = 0;
-    if (coupon.discountType === "PERCENTAGE") {
-      discount = (orderValue * coupon.discountValue) / 100;
-      if (coupon.maxDiscount && discount > coupon.maxDiscount) {
-        discount = coupon.maxDiscount;
-      }
-    } else {
-      discount = coupon.discountValue;
-    }
-
-    const finalAmount = orderValue - discount;
-
-    res.status(200).json({
-      code,
-      discount,
-      finalAmount
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  if (serviceId) {
+    const service = await Service.findById(serviceId).select("price").lean();
+    if (!service) throw httpError(404, "Service not found");
+    orderValue = service.price;
+  } else if (packageId) {
+    const pkg = await Package.findById(packageId).select("price").lean();
+    if (!pkg) throw httpError(404, "Combo not found");
+    orderValue = pkg.price;
   }
+
+  const result = await applyCoupon({ code, userId: req.userId, orderValue });
+  res.json({
+    code: result.code,
+    offerName: result.coupon.offerName,
+    orderValue,
+    discount: result.discount,
+    finalAmount: result.finalAmount,
+  });
 };

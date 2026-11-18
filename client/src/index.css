@@ -1,1 +1,309 @@
 @import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   Luxe Hair design tokens ("quiet luxury")
+   Use these via Tailwind utilities: bg-cream, text-ink, bg-gold,
+   font-display, rounded-card, shadow-soft, etc.
+   ------------------------------------------------------------------ */
+@theme {
+  --font-display: "Cormorant Garamond", "Times New Roman", serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-ink: #1c1917;          /* primary text, dark surfaces */
+  --color-ink-soft: #44403c;     /* body text */
+  --color-muted: #78716c;        /* secondary text */
+  --color-line: #e7e0d5;         /* borders / dividers */
+  --color-cream: #faf7f2;        /* page background */
+  --color-sand: #f2ece2;         /* subtle surfaces */
+  --color-gold: #b08d57;         /* brand accent */
+  --color-gold-dark: #8a6d3f;    /* accent hover / text on light */
+  --color-gold-light: #e9dcc4;   /* accent tint */
+  --color-success: #3f7d58;
+  --color-danger: #b4483c;
+  --color-warning: #b7791f;
+
+  --radius-card: 1.25rem;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 1px 2px rgb(28 25 23 / 0.04), 0 8px 24px rgb(28 25 23 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(28 25 23 / 0.05), 0 18px 40px rgb(28 25 23 / 0.10);
+
+  --animate-fade-up: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-scale-in: scale-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-slide-in-right: slide-in-right 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes shimmer {
+    from { background-position: -400px 0; }
+    to { background-position: 400px 0; }
+  }
+
+  /* Demo checkout */
+  --animate-draw: draw 0.6s 0.15s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  --animate-pop: pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-ring: ring 1.6s ease-out infinite;
+  --animate-sheen: sheen 3.5s ease-in-out infinite;
+  --animate-shake: shake 0.4s ease-in-out;
+
+  @keyframes draw {
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes pop {
+    0% { transform: scale(0.4); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes ring {
+    0% { transform: scale(0.8); opacity: 0.7; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+  @keyframes sheen {
+    0%, 60% { transform: translateX(-120%) skewX(-20deg); }
+    100% { transform: translateX(220%) skewX(-20deg); }
+  }
+  /* Visual effects */
+  --animate-blob: blob 18s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-spin-slow: spin 14s linear infinite;
+  --animate-gradient: gradient-pan 8s ease infinite;
+  --animate-pulse-dot: pulse-dot 2s ease-out infinite;
+
+  @keyframes blob {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(8%, -6%) scale(1.08); }
+    66% { transform: translate(-6%, 8%) scale(0.95); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+  @keyframes gradient-pan {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  @keyframes pulse-dot {
+    0% { box-shadow: 0 0 0 0 rgb(176 141 87 / 0.6); }
+    100% { box-shadow: 0 0 0 12px rgb(176 141 87 / 0); }
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    scroll-behavior: smooth;
+    /* 15px base: every rem-based size (text, spacing, radii) is ~6% more compact.
+       Large desktops get the full 16px back. */
+    font-size: 93.75%;
+    /* Decorative glows/blobs must never create a sideways scrollbar.
+       `clip` (unlike `hidden`) keeps position: sticky working. */
+    overflow-x: clip;
+  }
+  @media (min-width: 1600px) {
+    html {
+      font-size: 100%;
+    }
+  }
+  body {
+    overflow-x: clip;
+  }
+
+  /* ---------------- Scrollbars ----------------
+     Slim, floating thumb on a transparent track: soft charcoal at rest,
+     gold on hover, deeper gold while dragging. */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+    background: transparent;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+  ::-webkit-scrollbar-thumb {
+    min-height: 48px;
+    border-radius: 999px;
+    /* transparent border + padding-box clip = a thin pill floating in the gutter */
+    border: 3.5px solid transparent;
+    background-clip: padding-box;
+    background-color: rgb(28 25 23 / 0.22);
+    transition: background-color 0.2s;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    border-width: 2.5px;
+    background-color: var(--color-gold);
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--color-gold-dark);
+  }
+
+  /* Desktop: <PageScrollbar /> draws a floating thumb, so hide the native page bar
+     (it would otherwise reserve a light strip beside dark sections). */
+  html.custom-scrollbar {
+    scrollbar-width: none;
+  }
+  html.custom-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+  }
+
+  /* Inner scroll areas (drawers, modals, lists): thinner still */
+  .overflow-y-auto::-webkit-scrollbar,
+  .overflow-x-auto::-webkit-scrollbar,
+  .overflow-auto::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .overflow-y-auto::-webkit-scrollbar-thumb,
+  .overflow-x-auto::-webkit-scrollbar-thumb,
+  .overflow-auto::-webkit-scrollbar-thumb {
+    border-width: 2px;
+    background-color: rgb(28 25 23 / 0.16);
+  }
+  .overflow-y-auto::-webkit-scrollbar-thumb:hover,
+  .overflow-x-auto::-webkit-scrollbar-thumb:hover,
+  .overflow-auto::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-gold);
+  }
+
+  /* Firefox only (Chromium would let these override the styles above) */
+  @supports not selector(::-webkit-scrollbar) {
+    html {
+      scrollbar-width: thin;
+      scrollbar-color: rgb(28 25 23 / 0.25) transparent;
+    }
+    .overflow-y-auto,
+    .overflow-x-auto,
+    .overflow-auto {
+      scrollbar-width: thin;
+      scrollbar-color: rgb(28 25 23 / 0.18) transparent;
+    }
+  }
+
+  /* Utility for horizontal chip rows that should scroll without a visible bar */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  body {
+    @apply bg-cream font-sans text-ink-soft;
+  }
+  h1, h2, h3, h4 {
+    @apply text-ink;
+  }
+  ::selection {
+    @apply bg-gold-light text-ink;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Centered page container with comfortable side gutters */
+  .container-page {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+  /* Small uppercase label above section titles */
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.2em] text-gold-dark;
+  }
+  /* Animated gold gradient text (used for accent words) */
+  .text-gold-gradient {
+    background: linear-gradient(100deg, #8a6d3f 0%, #d9bf8c 35%, #b08d57 60%, #f1e2c2 80%, #8a6d3f 100%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    @apply animate-gradient;
+  }
+  /* Rotating conic glow border: wrap content in an element with this class */
+  .glow-border {
+    position: relative;
+    isolation: isolate;
+  }
+  .glow-border::before {
+    content: "";
+    position: absolute;
+    inset: -1.5px;
+    z-index: -1;
+    border-radius: inherit;
+    background: conic-gradient(from var(--glow-angle, 0deg), transparent 0deg, #d9bf8c 60deg, #b08d57 120deg, transparent 180deg, transparent 360deg);
+    animation: glow-rotate 4s linear infinite;
+  }
+  /* Diagonal light sweep on hover: add to a relative, overflow-hidden parent with `group` */
+  .shine::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 0.35) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+  .group:hover .shine::after,
+  .shine:hover::after {
+    transform: translateX(120%);
+  }
+  /* Arch-topped image frame (salon-style) */
+  .arch {
+    border-radius: 999px 999px 1.5rem 1.5rem;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--color-sand) 0%, #fbf8f3 50%, var(--color-sand) 100%);
+    background-size: 800px 100%;
+    @apply animate-shimmer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Conic glow border angle (must be top-level) */
+@property --glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes glow-rotate {
+  to { --glow-angle: 360deg; }
+}

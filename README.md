@@ -56,32 +56,37 @@
 cd luxe-hair</code></pre>
 
   <h4>2️⃣ Install Dependencies</h4>
-  <pre><code># Backend
-cd server
-npm install
+  <pre><code>cd server &amp;&amp; npm install
+cd ../client &amp;&amp; npm install
+cd ../admin &amp;&amp; npm install</code></pre>
 
-# Frontend
-cd client
-npm install</code></pre>
+  <h4>3️⃣ Environment Variables</h4>
+  <p>Each app has a <code>.env.example</code>. Copy it to <code>.env</code> and fill in the values. <code>.env</code> files are git-ignored.</p>
+  <table>
+    <tr><th>File</th><th>Key settings</th></tr>
+    <tr><td><code>server/.env</code></td><td><code>MONGO_URL</code>, <code>JWT_SECRET</code>, <code>EMAIL_USER</code>/<code>EMAIL_PASS</code>, <code>CLIENT_URLS</code> (allowed frontend origins for CORS), optional <code>CLOUDINARY_CLOUD_NAME</code> / <code>CLOUDINARY_API_KEY</code> / <code>CLOUDINARY_API_SECRET</code> (image hosting; images are saved in <code>server/uploads</code> when blank)</td></tr>
+    <tr><td><code>client/.env</code></td><td><code>VITE_API_URL</code></td></tr>
+    <tr><td><code>admin/.env</code></td><td><code>VITE_API_URL</code>, <code>VITE_SITE_URL</code></td></tr>
+  </table>
+  <p><strong>Production:</strong> set <code>CLIENT_URLS</code> to your deployed client and admin URLs (comma-separated), otherwise the browser requests are blocked by CORS.</p>
 
-  <h4>3️⃣ Setup Environment Variables (Backend)</h4>
-  <pre><code>MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_secret_key
-PORT=5000
-EMAIL_USER=your_email@example.com
-EMAIL_PASS=your_email_app_password</code></pre>
+  <h4>4️⃣ Run the Application</h4>
+  <pre><code>cd server &amp;&amp; npm run dev    # API on http://localhost:5000
+cd client &amp;&amp; npm run dev    # site on http://localhost:5173
+cd admin  &amp;&amp; npm run dev    # admin on http://localhost:5174</code></pre>
 
-  <h4>4️⃣ Setup Environment Variables (Client/Admin)</h4>
-  <pre><code>VITE_API_URL=http://localhost:5000</code></pre>
+  <h4>5️⃣ Payments</h4>
+  <ul>
+    <li><strong>Pay at salon</strong> works out of the box.</li>
+    <li><strong>Pay online</strong> is a <strong>demo checkout</strong> for showcasing: an animated card / UPI form with a simulated processing step. No payment gateway is connected and no money is charged. Use any card number (e.g. 4242 4242 4242 4242), any future expiry and any 3-digit CVV, or any UPI ID like <code>name@okbank</code>. Card numbers are never sent to the server. Unfinished checkouts are released after 30 minutes.</li>
+  </ul>
 
-  <h4>5️⃣ Run the Application</h4>
-  <pre><code># Start backend
-cd server
-npm run dev
-
-# Start frontend
-cd client   # or cd admin
-npm run dev</code></pre>
+  <h4>6️⃣ Security notes</h4>
+  <ul>
+    <li><strong>Showcase mode:</strong> the admin panel has no login and admin endpoints are open, so anyone with the URL can change data. Re-run <code>npm run seed</code> to restore demo data.</li>
+    <li>Prices and coupon discounts are always computed on the server.</li>
+    <li>Requests are validated with zod, rate-limited, and served with Helmet security headers.</li>
+  </ul>
 
   <h2>💌 Email Notifications</h2>
   <ul>
@@ -92,7 +97,7 @@ npm run dev</code></pre>
 
   <h2>📊 Dashboard Highlights</h2>
   <ul>
-    <li>Interactive <strong>monthly revenue line chart</strong></li>
+    <li>Monthly revenue chart (services vs combos), booking status breakdown, top services and today's schedule</li>
     <li>Real-time analytics for bookings and orders</li>
     <li>Track <strong>staff performance</strong>, <strong>offers</strong>, and <strong>user reviews</strong></li>
   </ul>
@@ -106,7 +111,6 @@ npm run dev</code></pre>
 
   <h2>🪄 Future Enhancements</h2>
   <ul>
-    <li>Integrate <strong>Razorpay / Stripe</strong> for real payments</li>
     <li>Add <strong>SMS notifications</strong> for reminders</li>
     <li>Enhance analytics (daily reports, retention tracking)</li>
   </ul>

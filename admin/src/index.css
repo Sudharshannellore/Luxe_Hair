@@ -1,1 +1,179 @@
 @import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   Luxe Hair design tokens ("quiet luxury")
+   Use these via Tailwind utilities: bg-cream, text-ink, bg-gold,
+   font-display, rounded-card, shadow-soft, etc.
+   ------------------------------------------------------------------ */
+@theme {
+  --font-display: "Cormorant Garamond", "Times New Roman", serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-ink: #1c1917;          /* primary text, dark surfaces */
+  --color-ink-soft: #44403c;     /* body text */
+  --color-muted: #78716c;        /* secondary text */
+  --color-line: #e7e0d5;         /* borders / dividers */
+  --color-cream: #faf7f2;        /* page background */
+  --color-sand: #f2ece2;         /* subtle surfaces */
+  --color-gold: #b08d57;         /* brand accent */
+  --color-gold-dark: #8a6d3f;    /* accent hover / text on light */
+  --color-gold-light: #e9dcc4;   /* accent tint */
+  --color-success: #3f7d58;
+  --color-danger: #b4483c;
+  --color-warning: #b7791f;
+
+  --radius-card: 1.25rem;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 1px 2px rgb(28 25 23 / 0.04), 0 8px 24px rgb(28 25 23 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(28 25 23 / 0.05), 0 18px 40px rgb(28 25 23 / 0.10);
+
+  --animate-fade-up: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.3s ease-out both;
+  --animate-scale-in: scale-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-slide-in-right: slide-in-right 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes shimmer {
+    from { background-position: -400px 0; }
+    to { background-position: 400px 0; }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-cream font-sans text-ink-soft;
+  }
+
+  /* ---------------- Scrollbars (matches the customer site) ----------------
+     Slim, floating thumb on a transparent track: soft charcoal at rest,
+     gold on hover, deeper gold while dragging. No arrows, no coloured strip. */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+    background: transparent;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-button {
+    display: none;
+  }
+  ::-webkit-scrollbar-thumb {
+    min-height: 40px;
+    border-radius: 999px;
+    border: 3.5px solid transparent; /* transparent border + padding-box = floating pill */
+    background-clip: padding-box;
+    background-color: rgb(28 25 23 / 0.2);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    border-width: 2.5px;
+    background-color: var(--color-gold);
+  }
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--color-gold-dark);
+  }
+
+  /* Tables, drawers, modals, message list: thinner */
+  .overflow-x-auto::-webkit-scrollbar,
+  [role="dialog"] .overflow-y-auto::-webkit-scrollbar,
+  .overflow-y-auto .overflow-y-auto::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .overflow-x-auto::-webkit-scrollbar-thumb,
+  [role="dialog"] .overflow-y-auto::-webkit-scrollbar-thumb,
+  .overflow-y-auto .overflow-y-auto::-webkit-scrollbar-thumb {
+    border-width: 2px;
+    background-color: rgb(28 25 23 / 0.15);
+  }
+  .overflow-x-auto::-webkit-scrollbar-thumb:hover,
+  [role="dialog"] .overflow-y-auto::-webkit-scrollbar-thumb:hover,
+  .overflow-y-auto .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-gold);
+  }
+
+  /* Sidebar menu: bar only appears while hovering the menu */
+  aside nav::-webkit-scrollbar {
+    width: 8px;
+  }
+  aside nav::-webkit-scrollbar-thumb {
+    border-width: 2px;
+    background-color: transparent;
+  }
+  aside nav:hover::-webkit-scrollbar-thumb {
+    background-color: rgb(28 25 23 / 0.15);
+  }
+  aside nav:hover::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-gold);
+  }
+
+  /* Firefox only (Chromium would let these override the styles above) */
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgb(28 25 23 / 0.22) transparent;
+    }
+  }
+  h1, h2, h3, h4 {
+    @apply text-ink;
+  }
+  ::selection {
+    @apply bg-gold-light text-ink;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Centered page container with comfortable side gutters */
+  .container-page {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+  /* Small uppercase label above section titles */
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.2em] text-gold-dark;
+  }
+  .skeleton {
+    background: linear-gradient(90deg, var(--color-sand) 0%, #fbf8f3 50%, var(--color-sand) 100%);
+    background-size: 800px 100%;
+    @apply animate-shimmer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,8 +1,8 @@
 const express = require("express");
-const router = express.Router();
-const dashboardController = require('../controllers/dashboardController')
+const c = require("../controllers/dashboardController");
 
-// Use service
-router.get("/get", dashboardController.getStats);
+const router = express.Router();
+
+router.get("/get", c.getStats);
 
 module.exports = router;
